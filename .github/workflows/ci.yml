@@ -14,14 +14,16 @@ jobs:
       - name: Clonar repositorio
         uses: actions/checkout@v3
 
-      - name: Instalar Node.js
+      - name: Usar Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
 
       - name: Instalar dependencias
-        run: npm install
+        run: npm ci
 
-      - name: Ejecutar pruebas unitarias con npx
+      - name: Verificar jest instalado
+        run: npx jest --version
+
+      - name: Ejecutar pruebas unitarias
         run: npx jest
-      
