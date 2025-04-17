@@ -22,5 +22,6 @@ jobs:
       - name: Instalar dependencias
         run: npm install
 
-      - name: Ejecutar pruebas unitarias
-        run: npm test
+      - name: Ejecutar pruebas unitarias con npx
+        run: npx jest
+      
