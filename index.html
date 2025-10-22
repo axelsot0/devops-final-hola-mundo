@@ -3,32 +3,530 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hola Mundo</title>
+  <title>Mi Horario Semanal</title>
   <style>
-    body {
+    * {
       margin: 0;
-      height: 100vh;
-      background: linear-gradient(to bottom right, #6a11cb, #2575fc);
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 30px;
     }
 
     h1 {
-      color: white;
-      font-size: 3em;
-      opacity: 0;
-      animation: fadeIn 2s ease-in forwards;
+      color: #667eea;
+      font-size: 2.5em;
+      margin-bottom: 10px;
+      animation: fadeInDown 0.8s ease-out;
     }
 
+    .subtitle {
+      color: #666;
+      font-size: 1.1em;
+    }
+
+    /* Formulario de actividades */
+    .form-section {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 25px;
+      border-radius: 15px;
+      margin-bottom: 30px;
+      color: white;
+      animation: fadeIn 1s ease-out;
+    }
+
+    .form-section h2 {
+      margin-bottom: 20px;
+      font-size: 1.5em;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      margin-bottom: 5px;
+      font-weight: 600;
+      font-size: 0.9em;
+    }
+
+    input, select {
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      background: rgba(255, 255, 255, 0.9);
+      transition: all 0.3s;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+    }
+
+    .btn {
+      padding: 12px 30px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: white;
+      color: #667eea;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-danger {
+      background: #ff4757;
+      color: white;
+      padding: 8px 15px;
+      font-size: 0.9em;
+    }
+
+    .btn-danger:hover {
+      background: #ee5a6f;
+    }
+
+    .btn-edit {
+      background: #ffa502;
+      color: white;
+      padding: 8px 15px;
+      font-size: 0.9em;
+      margin-right: 5px;
+    }
+
+    .btn-edit:hover {
+      background: #ff7f00;
+    }
+
+    /* Horario Semanal */
+    .schedule-section {
+      margin-bottom: 30px;
+    }
+
+    .schedule-section h2 {
+      color: #667eea;
+      margin-bottom: 20px;
+      font-size: 1.8em;
+    }
+
+    .week-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+    }
+
+    .day-card {
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      border-radius: 15px;
+      padding: 20px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      transition: transform 0.3s;
+      animation: slideUp 0.5s ease-out backwards;
+    }
+
+    .day-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    .day-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 1.2em;
+    }
+
+    .activity-list {
+      min-height: 100px;
+    }
+
+    .activity-item {
+      background: white;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 4px solid #667eea;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .activity-name {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 5px;
+    }
+
+    .activity-time {
+      color: #666;
+      font-size: 0.9em;
+      margin-bottom: 5px;
+    }
+
+    .activity-duration {
+      color: #764ba2;
+      font-size: 0.85em;
+      font-weight: 600;
+    }
+
+    .activity-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 5px;
+    }
+
+    .empty-day {
+      text-align: center;
+      color: #999;
+      padding: 20px;
+      font-style: italic;
+    }
+
+    /* Animaciones */
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-20px); }
-      to { opacity: 1; transform: translateY(0); }
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Estilos para días con animación escalonada */
+    .day-card:nth-child(1) { animation-delay: 0.1s; }
+    .day-card:nth-child(2) { animation-delay: 0.2s; }
+    .day-card:nth-child(3) { animation-delay: 0.3s; }
+    .day-card:nth-child(4) { animation-delay: 0.4s; }
+    .day-card:nth-child(5) { animation-delay: 0.5s; }
+    .day-card:nth-child(6) { animation-delay: 0.6s; }
+    .day-card:nth-child(7) { animation-delay: 0.7s; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container {
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 2em;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .week-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>¡Hola Mundo desde GitHub Pages!</h1>
+  <div class="container">
+    <header>
+      <h1>Mi Horario Semanal</h1>
+      <p class="subtitle">Organiza tus actividades diarias y gestiona tu tiempo eficientemente</p>
+    </header>
+
+    <!-- Formulario para agregar actividades -->
+    <section class="form-section">
+      <h2>Agregar Nueva Actividad</h2>
+      <form id="activityForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="activityName">Nombre de la Actividad</label>
+            <input type="text" id="activityName" placeholder="Ej: Reunión de equipo" required>
+          </div>
+          <div class="form-group">
+            <label for="activityDay">Día de la Semana</label>
+            <select id="activityDay" required>
+              <option value="">Seleccionar día</option>
+              <option value="Lunes">Lunes</option>
+              <option value="Martes">Martes</option>
+              <option value="Miércoles">Miércoles</option>
+              <option value="Jueves">Jueves</option>
+              <option value="Viernes">Viernes</option>
+              <option value="Sábado">Sábado</option>
+              <option value="Domingo">Domingo</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="activityTime">Hora de Inicio</label>
+            <input type="time" id="activityTime" required>
+          </div>
+          <div class="form-group">
+            <label for="activityDuration">Duración (minutos)</label>
+            <input type="number" id="activityDuration" placeholder="60" min="5" required>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" id="submitBtn">Agregar Actividad</button>
+      </form>
+    </section>
+
+    <!-- Horario Semanal -->
+    <section class="schedule-section">
+      <h2>Horario de la Semana</h2>
+      <div class="week-grid" id="weekGrid">
+        <!-- Los días se generarán dinámicamente con JavaScript -->
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Estructura de datos para almacenar actividades
+    let activities = [];
+    let editingId = null;
+
+    // Días de la semana
+    const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+    // Inicializar la aplicación
+    document.addEventListener('DOMContentLoaded', () => {
+      loadActivities();
+      renderWeek();
+      setupEventListeners();
+    });
+
+    // Configurar event listeners
+    function setupEventListeners() {
+      const form = document.getElementById('activityForm');
+      form.addEventListener('submit', handleFormSubmit);
+    }
+
+    // Manejar envío del formulario
+    function handleFormSubmit(e) {
+      e.preventDefault();
+
+      const name = document.getElementById('activityName').value.trim();
+      const day = document.getElementById('activityDay').value;
+      const time = document.getElementById('activityTime').value;
+      const duration = parseInt(document.getElementById('activityDuration').value);
+
+      if (editingId !== null) {
+        // Modo edición
+        const activityIndex = activities.findIndex(a => a.id === editingId);
+        activities[activityIndex] = {
+          id: editingId,
+          name,
+          day,
+          time,
+          duration
+        };
+        editingId = null;
+        document.getElementById('submitBtn').textContent = 'Agregar Actividad';
+      } else {
+        // Modo crear nueva
+        const activity = {
+          id: Date.now(),
+          name,
+          day,
+          time,
+          duration
+        };
+        activities.push(activity);
+      }
+
+      saveActivities();
+      renderWeek();
+      e.target.reset();
+    }
+
+    // Guardar actividades en localStorage
+    function saveActivities() {
+      localStorage.setItem('weeklyActivities', JSON.stringify(activities));
+    }
+
+    // Cargar actividades desde localStorage
+    function loadActivities() {
+      const stored = localStorage.getItem('weeklyActivities');
+      if (stored) {
+        activities = JSON.parse(stored);
+      }
+    }
+
+    // Renderizar la semana completa
+    function renderWeek() {
+      const weekGrid = document.getElementById('weekGrid');
+      weekGrid.innerHTML = '';
+
+      daysOfWeek.forEach(day => {
+        const dayCard = createDayCard(day);
+        weekGrid.appendChild(dayCard);
+      });
+    }
+
+    // Crear tarjeta de día
+    function createDayCard(day) {
+      const card = document.createElement('div');
+      card.className = 'day-card';
+
+      const header = document.createElement('div');
+      header.className = 'day-header';
+      header.textContent = day;
+
+      const activityList = document.createElement('div');
+      activityList.className = 'activity-list';
+
+      // Filtrar y ordenar actividades para este día
+      const dayActivities = activities
+        .filter(a => a.day === day)
+        .sort((a, b) => a.time.localeCompare(b.time));
+
+      if (dayActivities.length === 0) {
+        const emptyMessage = document.createElement('div');
+        emptyMessage.className = 'empty-day';
+        emptyMessage.textContent = 'Sin actividades';
+        activityList.appendChild(emptyMessage);
+      } else {
+        dayActivities.forEach(activity => {
+          const activityItem = createActivityItem(activity);
+          activityList.appendChild(activityItem);
+        });
+      }
+
+      card.appendChild(header);
+      card.appendChild(activityList);
+
+      return card;
+    }
+
+    // Crear elemento de actividad
+    function createActivityItem(activity) {
+      const item = document.createElement('div');
+      item.className = 'activity-item';
+
+      const name = document.createElement('div');
+      name.className = 'activity-name';
+      name.textContent = activity.name;
+
+      const time = document.createElement('div');
+      time.className = 'activity-time';
+      time.textContent = `Hora: ${formatTime(activity.time)}`;
+
+      const duration = document.createElement('div');
+      duration.className = 'activity-duration';
+      duration.textContent = `Duración: ${activity.duration} min`;
+
+      const actions = document.createElement('div');
+      actions.className = 'activity-actions';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn btn-edit';
+      editBtn.textContent = 'Editar';
+      editBtn.onclick = () => editActivity(activity.id);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-danger';
+      deleteBtn.textContent = 'Eliminar';
+      deleteBtn.onclick = () => deleteActivity(activity.id);
+
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+
+      item.appendChild(name);
+      item.appendChild(time);
+      item.appendChild(duration);
+      item.appendChild(actions);
+
+      return item;
+    }
+
+    // Formatear hora
+    function formatTime(time) {
+      const [hours, minutes] = time.split(':');
+      return `${hours}:${minutes}`;
+    }
+
+    // Editar actividad
+    function editActivity(id) {
+      const activity = activities.find(a => a.id === id);
+      if (activity) {
+        document.getElementById('activityName').value = activity.name;
+        document.getElementById('activityDay').value = activity.day;
+        document.getElementById('activityTime').value = activity.time;
+        document.getElementById('activityDuration').value = activity.duration;
+
+        editingId = id;
+        document.getElementById('submitBtn').textContent = 'Actualizar Actividad';
+
+        // Scroll al formulario
+        document.querySelector('.form-section').scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    // Eliminar actividad
+    function deleteActivity(id) {
+      if (confirm('¿Estás seguro de que deseas eliminar esta actividad?')) {
+        activities = activities.filter(a => a.id !== id);
+        saveActivities();
+        renderWeek();
+
+        // Si estábamos editando esta actividad, cancelar edición
+        if (editingId === id) {
+          editingId = null;
+          document.getElementById('activityForm').reset();
+          document.getElementById('submitBtn').textContent = 'Agregar Actividad';
+        }
+      }
+    }
+  </script>
 </body>
 </html>
