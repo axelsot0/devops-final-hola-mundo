@@ -1,4 +1,3 @@
-
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
@@ -16,37 +15,43 @@ describe('Aplicación de Horario Semanal', () => {
 
   test('La página contiene el título correcto', () => {
     const h1 = document.querySelector('h1');
-    expect(h1.textContent).toBe('Mi Horario Semanal');
+    expect(h1).not.toBeNull();
+    expect(h1.textContent.trim()).toBe('Mi Horario Semanal');
   });
 
   test('Existe el formulario para agregar actividades', () => {
-    const form = document.querySelector('#activityForm');
-    expect(form).toBeTruthy();
+    const form = document.getElementById('activityForm');
+    expect(form).not.toBeNull();
   });
 
   test('El formulario contiene todos los campos necesarios', () => {
-    const activityName = document.querySelector('#activityName');
-    const activityTime = document.querySelector('#activityTime');
-    const activityDuration = document.querySelector('#activityDuration');
+    const nameInput = document.getElementById('activityName');
+    const timeInput = document.getElementById('activityTime');
+    const hoursInput = document.getElementById('activityHours');
+    const minutesInput = document.getElementById('activityDuration');
+    const daysSelector = document.getElementById('daysSelector');
 
-    expect(activityName).toBeTruthy();
-    expect(activityTime).toBeTruthy();
-    expect(activityDuration).toBeTruthy();
+    expect(nameInput).not.toBeNull();
+    expect(timeInput).not.toBeNull();
+    expect(hoursInput).not.toBeNull();
+    expect(minutesInput).not.toBeNull();
+    expect(daysSelector).not.toBeNull();
   });
 
   test('Existe la sección del horario semanal', () => {
     const scheduleSection = document.querySelector('.schedule-section');
-    expect(scheduleSection).toBeTruthy();
+    expect(scheduleSection).not.toBeNull();
   });
 
   test('Existe el contenedor del grid semanal', () => {
-    const weekGrid = document.querySelector('#weekGrid');
-    expect(weekGrid).toBeTruthy();
+    const weekGrid = document.getElementById('weekGrid');
+    expect(weekGrid).not.toBeNull();
   });
 
   test('El botón de submit tiene el texto correcto', () => {
-    const submitBtn = document.querySelector('#submitBtn');
-    expect(submitBtn.textContent).toBe('Agregar Actividad');
+    const submitBtn = document.getElementById('submitBtn');
+    expect(submitBtn).not.toBeNull();
+    expect(submitBtn.textContent.trim()).toBe('Agregar Actividad');
   });
 
   test('Hay 7 checkboxes para los días de la semana', () => {
@@ -55,10 +60,18 @@ describe('Aplicación de Horario Semanal', () => {
   });
 
   test('Todos los checkboxes de días tienen los valores correctos', () => {
-    const expectedDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-    const dayCheckboxes = document.querySelectorAll('#daysSelector input[type="checkbox"]');
-    const actualDays = Array.from(dayCheckboxes).map(cb => cb.value);
-
-    expect(actualDays).toEqual(expectedDays);
+    const dayCheckboxes = Array.from(
+      document.querySelectorAll('#daysSelector input[type="checkbox"]')
+    );
+    const values = dayCheckboxes.map(cb => cb.value);
+    expect(values).toEqual([
+      'Lunes',
+      'Martes',
+      'Miércoles',
+      'Jueves',
+      'Viernes',
+      'Sábado',
+      'Domingo',
+    ]);
   });
 });
