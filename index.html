@@ -571,13 +571,12 @@
       // Estructura de datos para almacenar actividades
       let activities = [];
       let editingId = null;
-      let serverAvailable = true; // Rastrear si el servidor está disponible
+      // let serverAvailable = true; // No se usa - versión solo con localStorage
 
       // Días de la semana
       const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-      // URL de la API (se puede configurar según el entorno)
-      const API_URL = window.location.origin + '/api';
+      // const API_URL = window.location.origin + '/api'; // No se usa - versión solo con localStorage
 
     // Inicializar la aplicación
     document.addEventListener('DOMContentLoaded', async () => {
@@ -734,51 +733,26 @@
       }
 
       // Guardar actividades en el servidor
-      async function saveActivities(newActivities) {
-        try {
-          const response = await fetch(`${API_URL}/activities`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(newActivities)
-          });
-
-          if (!response.ok) {
-            throw new Error('Error al guardar actividades');
-          }
-
-          return await response.json();
-        } catch (error) {
-          console.error('Error saving activities:', error);
-          alert('Error al guardar las actividades. Por favor, intenta de nuevo.');
-        }
+      // Guardar actividades en localStorage
+      function saveActivities(newActivities) {
+        // Agregar las nuevas actividades al array existente
+        activities.push(...newActivities);
+        
+        // Guardar en localStorage
+        localStorage.setItem('weeklyActivities', JSON.stringify(activities));
+        
+        return Promise.resolve(activities);
       }
 
-      // Cargar actividades desde el servidor
-      async function loadActivities() {
-        try {
-          const response = await fetch(`${API_URL}/activities`);
-
-          if (!response.ok) {
-            throw new Error('Error al cargar actividades');
-          }
-
-          activities = await response.json();
-        } catch (error) {
-          console.error('Error loading activities:', error);
-          // Si hay error, intentar cargar desde localStorage como fallback
-          const stored = localStorage.getItem('weeklyActivities');
-          if (stored) {
-            activities = JSON.parse(stored);
-            // Si hay datos en localStorage, intentar migrarlos al servidor
-            if (activities.length > 0) {
-              await saveActivities(activities);
-            }
-          } else {
-            activities = [];
-          }
+      // Cargar actividades desde localStorage
+      function loadActivities() {
+        const stored = localStorage.getItem('weeklyActivities');
+        if (stored) {
+          activities = JSON.parse(stored);
+        } else {
+          activities = [];
         }
+        return Promise.resolve();
       }
 
       // Renderizar la semana completa
@@ -936,45 +910,24 @@
       }
 
       // Eliminar actividad por ID (función auxiliar)
-      async function deleteActivityById(id) {
-        try {
-          const response = await fetch(`${API_URL}/activities/${id}`, {
-            method: 'DELETE'
-          });
-
-          if (!response.ok) {
-            throw new Error('Error al eliminar actividad');
-          }
-
-          return true;
-        } catch (error) {
-          console.error('Error deleting activity:', error);
-          alert('Error al eliminar la actividad. Por favor, intenta de nuevo.');
-          return false;
-        }
+      function deleteActivityById(id) {
+        // Eliminar del array de actividades
+        activities = activities.filter(a => a.id !== id);
+        
+        // Guardar en localStorage
+        localStorage.setItem('weeklyActivities', JSON.stringify(activities));
+        
+        return Promise.resolve(true);
       }
 
-      // Eliminar múltiples actividades
-      async function deleteMultipleActivities(ids) {
-        try {
-          const response = await fetch(`${API_URL}/activities/delete-multiple`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ ids })
-          });
-
-          if (!response.ok) {
-            throw new Error('Error al eliminar actividades');
-          }
-
-          return true;
-        } catch (error) {
-          console.error('Error deleting multiple activities:', error);
-          alert('Error al eliminar las actividades. Por favor, intenta de nuevo.');
-          return false;
-        }
+      function deleteMultipleActivities(ids) {
+        // Eliminar todas las actividades con los IDs especificados
+        activities = activities.filter(a => !ids.includes(a.id));
+        
+        // Guardar en localStorage
+        localStorage.setItem('weeklyActivities', JSON.stringify(activities));
+        
+        return Promise.resolve(true);
       }
 
       // Eliminar actividad
