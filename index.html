@@ -135,6 +135,54 @@
       background: #ff7f00;
     }
 
+    .btn-success {
+      background: #2ecc71;
+      color: white;
+      padding: 8px 15px;
+      font-size: 0.9em;
+      margin-right: 10px;
+    }
+
+    .btn-success:hover {
+      background: #27ae60;
+    }
+
+    .btn-info {
+      background: #3498db;
+      color: white;
+      padding: 8px 15px;
+      font-size: 0.9em;
+    }
+
+    .btn-info:hover {
+      background: #2980b9;
+    }
+
+    .import-export-section {
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 15px;
+      margin-bottom: 30px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .import-export-section h3 {
+      color: #667eea;
+      margin-bottom: 15px;
+      font-size: 1.2em;
+    }
+
+    .import-export-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #importFile {
+      display: none;
+    }
+
     /* Horario Semanal */
     .schedule-section {
       margin-bottom: 30px;
@@ -319,6 +367,17 @@
         </div>
         <button type="submit" class="btn btn-primary" id="submitBtn">Agregar Actividad</button>
       </form>
+    </section>
+
+    <!-- Sección de Exportar/Importar -->
+    <section class="import-export-section">
+      <h3>Sincronizar entre Dispositivos</h3>
+      <div class="import-export-actions">
+        <button class="btn btn-success" onclick="exportActivities()">📥 Exportar Actividades</button>
+        <button class="btn btn-info" onclick="document.getElementById('importFile').click()">📤 Importar Actividades</button>
+        <input type="file" id="importFile" accept=".json" onchange="importActivities(event)">
+        <span style="color: #666; font-size: 0.9em;">Exporta tus actividades como JSON y cárgalas en otro dispositivo</span>
+      </div>
     </section>
 
     <!-- Horario Semanal -->
@@ -526,6 +585,93 @@
           document.getElementById('submitBtn').textContent = 'Agregar Actividad';
         }
       }
+    }
+
+    // Exportar actividades como JSON
+    function exportActivities() {
+      if (activities.length === 0) {
+        alert('No hay actividades para exportar');
+        return;
+      }
+
+      const dataStr = JSON.stringify(activities, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `horario-semanal-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert(`Se han exportado ${activities.length} actividades exitosamente`);
+    }
+
+    // Importar actividades desde JSON
+    function importActivities(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const importedActivities = JSON.parse(e.target.result);
+
+          // Validar que sea un array
+          if (!Array.isArray(importedActivities)) {
+            throw new Error('El archivo no contiene un formato válido');
+          }
+
+          // Validar estructura de cada actividad
+          const isValid = importedActivities.every(activity =>
+            activity.id &&
+            activity.name &&
+            activity.day &&
+            activity.time &&
+            activity.duration
+          );
+
+          if (!isValid) {
+            throw new Error('El archivo contiene actividades con formato inválido');
+          }
+
+          // Preguntar si sobrescribir o fusionar
+          let shouldMerge = false;
+          if (activities.length > 0) {
+            shouldMerge = confirm(
+              `Tienes ${activities.length} actividades guardadas.\n\n` +
+              `¿Deseas FUSIONAR las ${importedActivities.length} actividades importadas con las existentes?\n\n` +
+              `- OK: Fusionar (mantener ambas)\n` +
+              `- Cancelar: Reemplazar (borrar las existentes)`
+            );
+          }
+
+          if (shouldMerge) {
+            // Fusionar: agregar solo actividades nuevas (por ID)
+            const existingIds = new Set(activities.map(a => a.id));
+            const newActivities = importedActivities.filter(a => !existingIds.has(a.id));
+            activities = [...activities, ...newActivities];
+            alert(`Se fusionaron ${newActivities.length} actividades nuevas. Total: ${activities.length}`);
+          } else {
+            // Reemplazar completamente
+            activities = importedActivities;
+            alert(`Se importaron ${activities.length} actividades exitosamente`);
+          }
+
+          saveActivities();
+          renderWeek();
+
+        } catch (error) {
+          alert(`Error al importar: ${error.message}`);
+        }
+
+        // Limpiar el input para permitir re-importar el mismo archivo
+        event.target.value = '';
+      };
+
+      reader.readAsText(file);
     }
   </script>
 </body>
