@@ -130,6 +130,47 @@
       flex-direction: column;
     }
 
+    .form-group-days {
+      display: flex;
+      flex-direction: column;
+      grid-column: 1 / -1;
+    }
+
+    .days-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .day-checkbox {
+      display: flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px 15px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .day-checkbox:hover {
+      background: white;
+      transform: translateY(-2px);
+    }
+
+    .day-checkbox input[type="checkbox"] {
+      margin-right: 8px;
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+
+    .day-checkbox label {
+      margin: 0;
+      cursor: pointer;
+      font-size: 0.95em;
+    }
+
     .form-group.full-width {
       grid-column: 1 / -1;
     }
@@ -236,6 +277,54 @@
 
     .btn-edit:hover {
       background: #ff7f00;
+    }
+
+    .btn-success {
+      background: #2ecc71;
+      color: white;
+      padding: 8px 15px;
+      font-size: 0.9em;
+      margin-right: 10px;
+    }
+
+    .btn-success:hover {
+      background: #27ae60;
+    }
+
+    .btn-info {
+      background: #3498db;
+      color: white;
+      padding: 8px 15px;
+      font-size: 0.9em;
+    }
+
+    .btn-info:hover {
+      background: #2980b9;
+    }
+
+    .import-export-section {
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 15px;
+      margin-bottom: 30px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .import-export-section h3 {
+      color: #667eea;
+      margin-bottom: 15px;
+      font-size: 1.2em;
+    }
+
+    .import-export-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #importFile {
+      display: none;
     }
 
     /* Horario Semanal */
@@ -459,9 +548,53 @@
             <label for="activityDuration">Duración (minutos)</label>
             <input type="number" id="activityDuration" placeholder="30" min="0" max="59" required>
           </div>
+          <div class="form-group-days">
+            <label>Días de la Semana (selecciona uno o varios)</label>
+            <div class="days-container">
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-lunes" name="activityDays" value="Lunes">
+                <label for="day-lunes">Lunes</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-martes" name="activityDays" value="Martes">
+                <label for="day-martes">Martes</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-miercoles" name="activityDays" value="Miércoles">
+                <label for="day-miercoles">Miércoles</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-jueves" name="activityDays" value="Jueves">
+                <label for="day-jueves">Jueves</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-viernes" name="activityDays" value="Viernes">
+                <label for="day-viernes">Viernes</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-sabado" name="activityDays" value="Sábado">
+                <label for="day-sabado">Sábado</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-domingo" name="activityDays" value="Domingo">
+                <label for="day-domingo">Domingo</label>
+              </div>
+            </div>
+          </div>
         </div>
         <button type="submit" class="btn btn-primary" id="submitBtn">Agregar Actividad</button>
       </form>
+    </section>
+
+    <!-- Sección de Exportar/Importar -->
+    <section class="import-export-section">
+      <h3>Sincronizar entre Dispositivos</h3>
+      <div class="import-export-actions">
+        <button class="btn btn-success" onclick="exportActivities()">📥 Exportar Actividades</button>
+        <button class="btn btn-info" onclick="document.getElementById('importFile').click()">📤 Importar Actividades</button>
+        <input type="file" id="importFile" accept=".json" onchange="importActivities(event)">
+        <span style="color: #666; font-size: 0.9em;">Exporta tus actividades como JSON y cárgalas en otro dispositivo</span>
+      </div>
     </section>
 
     <!-- Horario Semanal -->
@@ -578,7 +711,45 @@
         return;
       }
 
+      // Obtener todos los días seleccionados
+      const selectedDays = Array.from(document.querySelectorAll('input[name="activityDays"]:checked'))
+        .map(checkbox => checkbox.value);
+
+      // Validar que al menos un día esté seleccionado
+      if (selectedDays.length === 0) {
+        alert('Por favor selecciona al menos un día de la semana');
+        return;
+      }
+
       if (editingId !== null) {
+        // Modo edición: actualizar la actividad existente
+        const activityIndex = activities.findIndex(a => a.id === editingId);
+        activities[activityIndex] = {
+          id: editingId,
+          name,
+          day: selectedDays[0], // En modo edición solo se puede un día
+          time,
+          duration
+        };
+        editingId = null;
+        document.getElementById('submitBtn').textContent = 'Agregar Actividad';
+      } else {
+        // Modo crear nueva: crear una actividad por cada día seleccionado
+        const baseTimestamp = Date.now();
+        selectedDays.forEach((day, index) => {
+          const activity = {
+            id: baseTimestamp + index, // ID único para cada día
+            name,
+            day,
+            time,
+            duration
+          };
+          activities.push(activity);
+        });
+
+        if (selectedDays.length > 1) {
+          alert(`Se crearon ${selectedDays.length} actividades (una por cada día seleccionado)`);
+        }
         // Modo edición - eliminar la actividad antigua
         await deleteActivityById(editingId, false);
         editingId = null;
@@ -598,6 +769,8 @@
       await loadActivities();
       renderWeek();
       e.target.reset();
+      // Desmarcar todos los checkboxes
+      document.querySelectorAll('input[name="activityDays"]').forEach(cb => cb.checked = false);
 
       // Desmarcar todos los checkboxes
       setSelectedDays([]);
@@ -797,6 +970,15 @@
         const days = relatedActivities.map(a => a.day);
         setSelectedDays(days);
 
+        // Desmarcar todos los checkboxes primero
+        document.querySelectorAll('input[name="activityDays"]').forEach(cb => cb.checked = false);
+
+        // Marcar solo el checkbox del día de esta actividad
+        const dayCheckbox = document.querySelector(`input[name="activityDays"][value="${activity.day}"]`);
+        if (dayCheckbox) {
+          dayCheckbox.checked = true;
+        }
+
         editingId = id;
         document.getElementById('submitBtn').textContent = 'Actualizar Actividad';
 
@@ -895,6 +1077,93 @@
           }
         }
       }
+    }
+
+    // Exportar actividades como JSON
+    function exportActivities() {
+      if (activities.length === 0) {
+        alert('No hay actividades para exportar');
+        return;
+      }
+
+      const dataStr = JSON.stringify(activities, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `horario-semanal-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert(`Se han exportado ${activities.length} actividades exitosamente`);
+    }
+
+    // Importar actividades desde JSON
+    function importActivities(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const importedActivities = JSON.parse(e.target.result);
+
+          // Validar que sea un array
+          if (!Array.isArray(importedActivities)) {
+            throw new Error('El archivo no contiene un formato válido');
+          }
+
+          // Validar estructura de cada actividad
+          const isValid = importedActivities.every(activity =>
+            activity.id &&
+            activity.name &&
+            activity.day &&
+            activity.time &&
+            activity.duration
+          );
+
+          if (!isValid) {
+            throw new Error('El archivo contiene actividades con formato inválido');
+          }
+
+          // Preguntar si sobrescribir o fusionar
+          let shouldMerge = false;
+          if (activities.length > 0) {
+            shouldMerge = confirm(
+              `Tienes ${activities.length} actividades guardadas.\n\n` +
+              `¿Deseas FUSIONAR las ${importedActivities.length} actividades importadas con las existentes?\n\n` +
+              `- OK: Fusionar (mantener ambas)\n` +
+              `- Cancelar: Reemplazar (borrar las existentes)`
+            );
+          }
+
+          if (shouldMerge) {
+            // Fusionar: agregar solo actividades nuevas (por ID)
+            const existingIds = new Set(activities.map(a => a.id));
+            const newActivities = importedActivities.filter(a => !existingIds.has(a.id));
+            activities = [...activities, ...newActivities];
+            alert(`Se fusionaron ${newActivities.length} actividades nuevas. Total: ${activities.length}`);
+          } else {
+            // Reemplazar completamente
+            activities = importedActivities;
+            alert(`Se importaron ${activities.length} actividades exitosamente`);
+          }
+
+          saveActivities();
+          renderWeek();
+
+        } catch (error) {
+          alert(`Error al importar: ${error.message}`);
+        }
+
+        // Limpiar el input para permitir re-importar el mismo archivo
+        event.target.value = '';
+      };
+
+      reader.readAsText(file);
     }
   </script>
 </body>

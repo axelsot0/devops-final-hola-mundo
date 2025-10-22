@@ -17,6 +17,10 @@ logs/
 .env.local
 .env.production
 
+# Build directories
+dist/
+build/
+
 # OS files
 .DS_Store
 Thumbs.db
