@@ -477,9 +477,12 @@
     // Días de la semana
     const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
+    // URL de la API (se puede configurar según el entorno)
+    const API_URL = window.location.origin + '/api';
+
     // Inicializar la aplicación
-    document.addEventListener('DOMContentLoaded', () => {
-      loadActivities();
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadActivities();
       loadThemePreference();
       renderWeek();
       setupEventListeners();
@@ -551,7 +554,7 @@
     }
 
     // Manejar envío del formulario
-    function handleFormSubmit(e) {
+    async function handleFormSubmit(e) {
       e.preventDefault();
 
       const name = document.getElementById('activityName').value.trim();
@@ -566,41 +569,74 @@
 
       if (editingId !== null) {
         // Modo edición - eliminar la actividad antigua
-        activities = activities.filter(a => a.id !== editingId);
+        await deleteActivityById(editingId, false);
         editingId = null;
         document.getElementById('submitBtn').textContent = 'Agregar Actividad';
       }
 
-      // Crear una actividad para cada día seleccionado
-      selectedDays.forEach(day => {
-        const activity = {
-          id: Date.now() + Math.random(), // ID único para cada actividad
-          name,
-          day,
-          time,
-          duration
-        };
-        activities.push(activity);
-      });
+      // Crear actividades para cada día seleccionado
+      const newActivities = selectedDays.map(day => ({
+        id: Date.now() + Math.random().toString(), // ID único para cada actividad
+        name,
+        day,
+        time,
+        duration
+      }));
 
-      saveActivities();
+      await saveActivities(newActivities);
+      await loadActivities();
       renderWeek();
       e.target.reset();
-      
+
       // Desmarcar todos los checkboxes
       setSelectedDays([]);
     }
 
-    // Guardar actividades en localStorage
-    function saveActivities() {
-      localStorage.setItem('weeklyActivities', JSON.stringify(activities));
+    // Guardar actividades en el servidor
+    async function saveActivities(newActivities) {
+      try {
+        const response = await fetch(`${API_URL}/activities`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newActivities)
+        });
+
+        if (!response.ok) {
+          throw new Error('Error al guardar actividades');
+        }
+
+        return await response.json();
+      } catch (error) {
+        console.error('Error saving activities:', error);
+        alert('Error al guardar las actividades. Por favor, intenta de nuevo.');
+      }
     }
 
-    // Cargar actividades desde localStorage
-    function loadActivities() {
-      const stored = localStorage.getItem('weeklyActivities');
-      if (stored) {
-        activities = JSON.parse(stored);
+    // Cargar actividades desde el servidor
+    async function loadActivities() {
+      try {
+        const response = await fetch(`${API_URL}/activities`);
+
+        if (!response.ok) {
+          throw new Error('Error al cargar actividades');
+        }
+
+        activities = await response.json();
+      } catch (error) {
+        console.error('Error loading activities:', error);
+        // Si hay error, intentar cargar desde localStorage como fallback
+        const stored = localStorage.getItem('weeklyActivities');
+        if (stored) {
+          activities = JSON.parse(stored);
+          // Si hay datos en localStorage, intentar migrarlos al servidor
+          if (activities.length > 0) {
+            await saveActivities(activities);
+          }
+        } else {
+          activities = [];
+        }
       }
     }
 
@@ -737,48 +773,94 @@
       }
     }
 
+    // Eliminar actividad por ID (función auxiliar)
+    async function deleteActivityById(id, confirm = true) {
+      try {
+        const response = await fetch(`${API_URL}/activities/${id}`, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) {
+          throw new Error('Error al eliminar actividad');
+        }
+
+        return true;
+      } catch (error) {
+        console.error('Error deleting activity:', error);
+        alert('Error al eliminar la actividad. Por favor, intenta de nuevo.');
+        return false;
+      }
+    }
+
+    // Eliminar múltiples actividades
+    async function deleteMultipleActivities(ids) {
+      try {
+        const response = await fetch(`${API_URL}/activities/delete-multiple`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ids })
+        });
+
+        if (!response.ok) {
+          throw new Error('Error al eliminar actividades');
+        }
+
+        return true;
+      } catch (error) {
+        console.error('Error deleting multiple activities:', error);
+        alert('Error al eliminar las actividades. Por favor, intenta de nuevo.');
+        return false;
+      }
+    }
+
     // Eliminar actividad
-    function deleteActivity(id) {
+    async function deleteActivity(id) {
       const activity = activities.find(a => a.id === id);
-      
+
       if (activity) {
         // Buscar todas las actividades relacionadas (mismo nombre, hora y duración)
-        const relatedActivities = activities.filter(a => 
-          a.name === activity.name && 
-          a.time === activity.time && 
+        const relatedActivities = activities.filter(a =>
+          a.name === activity.name &&
+          a.time === activity.time &&
           a.duration === activity.duration
         );
+
+        let success = false;
 
         if (relatedActivities.length > 1) {
           const confirmMsg = `Esta actividad se repite en ${relatedActivities.length} días. ¿Deseas eliminarla de todos los días o solo de ${activity.day}?`;
           const deleteAll = confirm(confirmMsg + '\n\nAceptar = Eliminar de todos los días\nCancelar = Eliminar solo de ' + activity.day);
-          
+
           if (deleteAll) {
             // Eliminar de todos los días
             const idsToDelete = relatedActivities.map(a => a.id);
-            activities = activities.filter(a => !idsToDelete.includes(a.id));
+            success = await deleteMultipleActivities(idsToDelete);
           } else {
             // Eliminar solo de este día
-            activities = activities.filter(a => a.id !== id);
+            success = await deleteActivityById(id);
           }
         } else {
           // Solo existe en un día, eliminar directamente
           if (confirm('¿Estás seguro de que deseas eliminar esta actividad?')) {
-            activities = activities.filter(a => a.id !== id);
+            success = await deleteActivityById(id);
           } else {
             return;
           }
         }
 
-        saveActivities();
-        renderWeek();
+        if (success) {
+          await loadActivities();
+          renderWeek();
 
-        // Si estábamos editando esta actividad, cancelar edición
-        if (editingId === id) {
-          editingId = null;
-          document.getElementById('activityForm').reset();
-          setSelectedDays([]);
-          document.getElementById('submitBtn').textContent = 'Agregar Actividad';
+          // Si estábamos editando esta actividad, cancelar edición
+          if (editingId === id) {
+            editingId = null;
+            document.getElementById('activityForm').reset();
+            setSelectedDays([]);
+            document.getElementById('submitBtn').textContent = 'Agregar Actividad';
+          }
         }
       }
     }
