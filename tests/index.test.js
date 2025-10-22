@@ -1,14 +1,15 @@
-
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 
 describe('Aplicación de Horario Semanal', () => {
+  let dom;
   let document;
 
   beforeAll(() => {
     const html = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
-    const dom = new JSDOM(html);
+    // No ejecutar scripts para evitar errores de fetch en tests
+    dom = new JSDOM(html, { runScripts: 'outside-only' });
     document = dom.window.document;
   });
 
