@@ -25,12 +25,10 @@ describe('Aplicación de Horario Semanal', () => {
 
   test('El formulario contiene todos los campos necesarios', () => {
     const activityName = document.getElementById('activityName');
-    const activityDay = document.getElementById('activityDay');
     const activityTime = document.getElementById('activityTime');
     const activityDuration = document.getElementById('activityDuration');
 
     expect(activityName).toBeTruthy();
-    expect(activityDay).toBeTruthy();
     expect(activityTime).toBeTruthy();
     expect(activityDuration).toBeTruthy();
   });
@@ -50,10 +48,16 @@ describe('Aplicación de Horario Semanal', () => {
     expect(submitBtn.textContent).toBe('Agregar Actividad');
   });
 
-  test('El selector de días tiene 7 opciones de días', () => {
-    const daySelect = document.getElementById('activityDay');
-    const options = daySelect.querySelectorAll('option');
-    // 7 días + 1 opción "Seleccionar día"
-    expect(options.length).toBe(8);
+  test('Hay 7 checkboxes para los días de la semana', () => {
+    const dayCheckboxes = document.querySelectorAll('input[name="activityDays"]');
+    expect(dayCheckboxes.length).toBe(7);
+  });
+
+  test('Todos los checkboxes de días tienen los valores correctos', () => {
+    const expectedDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const dayCheckboxes = document.querySelectorAll('input[name="activityDays"]');
+    const actualDays = Array.from(dayCheckboxes).map(cb => cb.value);
+
+    expect(actualDays).toEqual(expectedDays);
   });
 });

@@ -71,6 +71,47 @@
       flex-direction: column;
     }
 
+    .form-group-days {
+      display: flex;
+      flex-direction: column;
+      grid-column: 1 / -1;
+    }
+
+    .days-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .day-checkbox {
+      display: flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px 15px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .day-checkbox:hover {
+      background: white;
+      transform: translateY(-2px);
+    }
+
+    .day-checkbox input[type="checkbox"] {
+      margin-right: 8px;
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+
+    .day-checkbox label {
+      margin: 0;
+      cursor: pointer;
+      font-size: 0.95em;
+    }
+
     label {
       margin-bottom: 5px;
       font-weight: 600;
@@ -344,25 +385,45 @@
             <input type="text" id="activityName" placeholder="Ej: Reunión de equipo" required>
           </div>
           <div class="form-group">
-            <label for="activityDay">Día de la Semana</label>
-            <select id="activityDay" required>
-              <option value="">Seleccionar día</option>
-              <option value="Lunes">Lunes</option>
-              <option value="Martes">Martes</option>
-              <option value="Miércoles">Miércoles</option>
-              <option value="Jueves">Jueves</option>
-              <option value="Viernes">Viernes</option>
-              <option value="Sábado">Sábado</option>
-              <option value="Domingo">Domingo</option>
-            </select>
-          </div>
-          <div class="form-group">
             <label for="activityTime">Hora de Inicio</label>
             <input type="time" id="activityTime" required>
           </div>
           <div class="form-group">
             <label for="activityDuration">Duración (minutos)</label>
             <input type="number" id="activityDuration" placeholder="60" min="5" required>
+          </div>
+          <div class="form-group-days">
+            <label>Días de la Semana (selecciona uno o varios)</label>
+            <div class="days-container">
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-lunes" name="activityDays" value="Lunes">
+                <label for="day-lunes">Lunes</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-martes" name="activityDays" value="Martes">
+                <label for="day-martes">Martes</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-miercoles" name="activityDays" value="Miércoles">
+                <label for="day-miercoles">Miércoles</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-jueves" name="activityDays" value="Jueves">
+                <label for="day-jueves">Jueves</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-viernes" name="activityDays" value="Viernes">
+                <label for="day-viernes">Viernes</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-sabado" name="activityDays" value="Sábado">
+                <label for="day-sabado">Sábado</label>
+              </div>
+              <div class="day-checkbox">
+                <input type="checkbox" id="day-domingo" name="activityDays" value="Domingo">
+                <label for="day-domingo">Domingo</label>
+              </div>
+            </div>
           </div>
         </div>
         <button type="submit" class="btn btn-primary" id="submitBtn">Agregar Actividad</button>
@@ -415,37 +476,55 @@
       e.preventDefault();
 
       const name = document.getElementById('activityName').value.trim();
-      const day = document.getElementById('activityDay').value;
       const time = document.getElementById('activityTime').value;
       const duration = parseInt(document.getElementById('activityDuration').value);
 
+      // Obtener todos los días seleccionados
+      const selectedDays = Array.from(document.querySelectorAll('input[name="activityDays"]:checked'))
+        .map(checkbox => checkbox.value);
+
+      // Validar que al menos un día esté seleccionado
+      if (selectedDays.length === 0) {
+        alert('Por favor selecciona al menos un día de la semana');
+        return;
+      }
+
       if (editingId !== null) {
-        // Modo edición
+        // Modo edición: actualizar la actividad existente
         const activityIndex = activities.findIndex(a => a.id === editingId);
         activities[activityIndex] = {
           id: editingId,
           name,
-          day,
+          day: selectedDays[0], // En modo edición solo se puede un día
           time,
           duration
         };
         editingId = null;
         document.getElementById('submitBtn').textContent = 'Agregar Actividad';
       } else {
-        // Modo crear nueva
-        const activity = {
-          id: Date.now(),
-          name,
-          day,
-          time,
-          duration
-        };
-        activities.push(activity);
+        // Modo crear nueva: crear una actividad por cada día seleccionado
+        const baseTimestamp = Date.now();
+        selectedDays.forEach((day, index) => {
+          const activity = {
+            id: baseTimestamp + index, // ID único para cada día
+            name,
+            day,
+            time,
+            duration
+          };
+          activities.push(activity);
+        });
+
+        if (selectedDays.length > 1) {
+          alert(`Se crearon ${selectedDays.length} actividades (una por cada día seleccionado)`);
+        }
       }
 
       saveActivities();
       renderWeek();
       e.target.reset();
+      // Desmarcar todos los checkboxes
+      document.querySelectorAll('input[name="activityDays"]').forEach(cb => cb.checked = false);
     }
 
     // Guardar actividades en localStorage
@@ -559,9 +638,17 @@
       const activity = activities.find(a => a.id === id);
       if (activity) {
         document.getElementById('activityName').value = activity.name;
-        document.getElementById('activityDay').value = activity.day;
         document.getElementById('activityTime').value = activity.time;
         document.getElementById('activityDuration').value = activity.duration;
+
+        // Desmarcar todos los checkboxes primero
+        document.querySelectorAll('input[name="activityDays"]').forEach(cb => cb.checked = false);
+
+        // Marcar solo el checkbox del día de esta actividad
+        const dayCheckbox = document.querySelector(`input[name="activityDays"][value="${activity.day}"]`);
+        if (dayCheckbox) {
+          dayCheckbox.checked = true;
+        }
 
         editingId = id;
         document.getElementById('submitBtn').textContent = 'Actualizar Actividad';
@@ -582,6 +669,7 @@
         if (editingId === id) {
           editingId = null;
           document.getElementById('activityForm').reset();
+          document.querySelectorAll('input[name="activityDays"]').forEach(cb => cb.checked = false);
           document.getElementById('submitBtn').textContent = 'Agregar Actividad';
         }
       }
