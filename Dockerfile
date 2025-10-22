@@ -1,11 +1,30 @@
-# Usamos una imagen base de NGINX
-FROM nginx:alpine
+FROM node:18-alpine
 
-# Removemos el archivo por defecto de NGINX
-RUN rm /usr/share/nginx/html/index.html
+# Establecer directorio de trabajo
+WORKDIR /app
 
-# Copiamos nuestro archivo HTML al contenedor
-COPY index.html /usr/share/nginx/html/
+# Copiar archivos de dependencias
+COPY server/package*.json ./server/
 
-# Exponemos el puerto 80
-EXPOSE 80
+# Instalar dependencias del servidor
+WORKDIR /app/server
+RUN npm ci --only=production
+
+# Volver al directorio raíz
+WORKDIR /app
+
+# Copiar el resto de la aplicación
+COPY . .
+
+# Crear directorio para la base de datos
+RUN mkdir -p /app/server/data
+
+# Exponer el puerto
+EXPOSE 3000
+
+# Variables de entorno
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Comando para iniciar el servidor
+CMD ["node", "server/server.js"]

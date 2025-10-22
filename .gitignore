@@ -1,6 +1,42 @@
+# Node modules
 node_modules/
-.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Base de datos
+server/schedule.db
+server/data/
+
+# Logs
+logs/
 *.log
+
+# Environment variables
 .env
+.env.local
+.env.production
+
+# Build directories
 dist/
 build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+.nyc_output/
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
