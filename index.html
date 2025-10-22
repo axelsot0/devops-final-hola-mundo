@@ -363,6 +363,78 @@
     .day-card:nth-child(6) { animation-delay: 0.6s; }
     .day-card:nth-child(7) { animation-delay: 0.7s; }
 
+    /* Modal personalizado */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--container-bg);
+      border-radius: 15px;
+      padding: 30px;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.3s ease-out;
+    }
+
+    .modal-header {
+      font-size: 1.5em;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 15px;
+    }
+
+    .modal-body {
+      color: var(--text-secondary);
+      margin-bottom: 25px;
+      line-height: 1.6;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .modal-actions .btn {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .btn-secondary {
+      background: var(--text-tertiary);
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: var(--text-secondary);
+    }
+
+    .btn-warning {
+      background: #ffa502;
+      color: white;
+    }
+
+    .btn-warning:hover {
+      background: #ff7f00;
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
       .container {
@@ -388,6 +460,14 @@
 
       .days-selector {
         grid-template-columns: repeat(2, 1fr);
+      }
+
+      .modal-actions {
+        flex-direction: column;
+      }
+
+      .modal-actions .btn {
+        width: 100%;
       }
     }
   </style>
@@ -469,10 +549,22 @@
     </section>
   </div>
 
+  <!-- Modal de confirmación -->
+  <div id="confirmModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header" id="modalHeader">Confirmar acción</div>
+      <div class="modal-body" id="modalBody">¿Estás seguro?</div>
+      <div class="modal-actions" id="modalActions">
+        <!-- Los botones se generarán dinámicamente -->
+      </div>
+    </div>
+  </div>
+
   <script>
     // Estructura de datos para almacenar actividades
     let activities = [];
     let editingId = null;
+    let serverAvailable = true; // Rastrear si el servidor está disponible
 
     // Días de la semana
     const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -624,20 +716,54 @@
         }
 
         activities = await response.json();
+        serverAvailable = true;
       } catch (error) {
         console.error('Error loading activities:', error);
-        // Si hay error, intentar cargar desde localStorage como fallback
+        serverAvailable = false;
+
+        // Si hay error, cargar desde localStorage como fallback (sin mostrar alerta)
         const stored = localStorage.getItem('weeklyActivities');
         if (stored) {
           activities = JSON.parse(stored);
-          // Si hay datos en localStorage, intentar migrarlos al servidor
-          if (activities.length > 0) {
-            await saveActivities(activities);
-          }
         } else {
           activities = [];
         }
       }
+    }
+
+    // Mostrar modal personalizado
+    function showModal(title, message, buttons) {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('confirmModal');
+        const modalHeader = document.getElementById('modalHeader');
+        const modalBody = document.getElementById('modalBody');
+        const modalActions = document.getElementById('modalActions');
+
+        modalHeader.textContent = title;
+        modalBody.textContent = message;
+        modalActions.innerHTML = '';
+
+        buttons.forEach(button => {
+          const btn = document.createElement('button');
+          btn.className = `btn ${button.className}`;
+          btn.textContent = button.text;
+          btn.onclick = () => {
+            modal.classList.remove('active');
+            resolve(button.value);
+          };
+          modalActions.appendChild(btn);
+        });
+
+        modal.classList.add('active');
+
+        // Cerrar al hacer clic fuera del modal
+        modal.onclick = (e) => {
+          if (e.target === modal) {
+            modal.classList.remove('active');
+            resolve(null);
+          }
+        };
+      });
     }
 
     // Renderizar la semana completa
@@ -774,7 +900,7 @@
     }
 
     // Eliminar actividad por ID (función auxiliar)
-    async function deleteActivityById(id, confirm = true) {
+    async function deleteActivityById(id) {
       try {
         const response = await fetch(`${API_URL}/activities/${id}`, {
           method: 'DELETE'
@@ -787,7 +913,10 @@
         return true;
       } catch (error) {
         console.error('Error deleting activity:', error);
-        alert('Error al eliminar la actividad. Por favor, intenta de nuevo.');
+        // Solo mostrar error si el servidor estaba disponible antes
+        if (serverAvailable) {
+          alert('Error al eliminar la actividad. Por favor, intenta de nuevo.');
+        }
         return false;
       }
     }
@@ -810,7 +939,10 @@
         return true;
       } catch (error) {
         console.error('Error deleting multiple activities:', error);
-        alert('Error al eliminar las actividades. Por favor, intenta de nuevo.');
+        // Solo mostrar error si el servidor estaba disponible antes
+        if (serverAvailable) {
+          alert('Error al eliminar las actividades. Por favor, intenta de nuevo.');
+        }
         return false;
       }
     }
@@ -819,48 +951,67 @@
     async function deleteActivity(id) {
       const activity = activities.find(a => a.id === id);
 
-      if (activity) {
-        // Buscar todas las actividades relacionadas (mismo nombre, hora y duración)
-        const relatedActivities = activities.filter(a =>
-          a.name === activity.name &&
-          a.time === activity.time &&
-          a.duration === activity.duration
+      if (!activity) return;
+
+      // Buscar todas las actividades relacionadas (mismo nombre, hora y duración)
+      const relatedActivities = activities.filter(a =>
+        a.name === activity.name &&
+        a.time === activity.time &&
+        a.duration === activity.duration
+      );
+
+      let userChoice;
+      let success = false;
+
+      if (relatedActivities.length > 1) {
+        // Actividad repetida - mostrar modal con 3 opciones
+        const days = relatedActivities.map(a => a.day).join(', ');
+        userChoice = await showModal(
+          'Eliminar Actividad',
+          `"${activity.name}" se repite en ${relatedActivities.length} días (${days}).\n\n¿Qué deseas hacer?`,
+          [
+            { text: 'Cancelar', className: 'btn-secondary', value: 'cancel' },
+            { text: `Borrar solo ${activity.day}`, className: 'btn-warning', value: 'one' },
+            { text: 'Borrar de todos los días', className: 'btn-danger', value: 'all' }
+          ]
         );
 
-        let success = false;
-
-        if (relatedActivities.length > 1) {
-          const confirmMsg = `Esta actividad se repite en ${relatedActivities.length} días. ¿Deseas eliminarla de todos los días o solo de ${activity.day}?`;
-          const deleteAll = confirm(confirmMsg + '\n\nAceptar = Eliminar de todos los días\nCancelar = Eliminar solo de ' + activity.day);
-
-          if (deleteAll) {
-            // Eliminar de todos los días
-            const idsToDelete = relatedActivities.map(a => a.id);
-            success = await deleteMultipleActivities(idsToDelete);
-          } else {
-            // Eliminar solo de este día
-            success = await deleteActivityById(id);
-          }
-        } else {
-          // Solo existe en un día, eliminar directamente
-          if (confirm('¿Estás seguro de que deseas eliminar esta actividad?')) {
-            success = await deleteActivityById(id);
-          } else {
-            return;
-          }
+        if (userChoice === 'all') {
+          // Eliminar de todos los días
+          const idsToDelete = relatedActivities.map(a => a.id);
+          success = await deleteMultipleActivities(idsToDelete);
+        } else if (userChoice === 'one') {
+          // Eliminar solo de este día
+          success = await deleteActivityById(id);
         }
+        // Si userChoice === 'cancel' o null, no hacer nada
+      } else {
+        // Solo existe en un día - mostrar confirmación simple
+        userChoice = await showModal(
+          'Eliminar Actividad',
+          `¿Estás seguro de que deseas eliminar "${activity.name}"?`,
+          [
+            { text: 'Cancelar', className: 'btn-secondary', value: 'cancel' },
+            { text: 'Eliminar', className: 'btn-danger', value: 'delete' }
+          ]
+        );
 
-        if (success) {
-          await loadActivities();
-          renderWeek();
+        if (userChoice === 'delete') {
+          success = await deleteActivityById(id);
+        }
+      }
 
-          // Si estábamos editando esta actividad, cancelar edición
-          if (editingId === id) {
-            editingId = null;
-            document.getElementById('activityForm').reset();
-            setSelectedDays([]);
-            document.getElementById('submitBtn').textContent = 'Agregar Actividad';
-          }
+      // Si se eliminó exitosamente, actualizar la vista
+      if (success) {
+        await loadActivities();
+        renderWeek();
+
+        // Si estábamos editando esta actividad, cancelar edición
+        if (editingId === id) {
+          editingId = null;
+          document.getElementById('activityForm').reset();
+          setSelectedDays([]);
+          document.getElementById('submitBtn').textContent = 'Agregar Actividad';
         }
       }
     }
