@@ -474,428 +474,432 @@
   </div>
 
   <script>
-    // Estructura de datos para almacenar actividades
-    let activities = [];
-    let editingId = null;
+    (() => {
+      'use strict';
 
-    // Días de la semana
-    const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+      // Estructura de datos para almacenar actividades
+      let activities = [];
+      let editingId = null;
 
-    // URL de la API (se puede configurar según el entorno)
-    const API_URL = window.location.origin + '/api';
+      // Días de la semana
+      const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-    // Inicializar la aplicación
-    document.addEventListener('DOMContentLoaded', async () => {
-      await loadActivities();
-      loadThemePreference();
-      renderWeek();
-      setupEventListeners();
-    });
+      // URL de la API (se puede configurar según el entorno)
+      const API_URL = window.location.origin + '/api';
 
-    // Configurar event listeners
-    function setupEventListeners() {
-      const form = document.getElementById('activityForm');
-      form.addEventListener('submit', handleFormSubmit);
+      // Inicializar la aplicación
+      document.addEventListener('DOMContentLoaded', async () => {
+        await loadActivities();
+        loadThemePreference();
+        renderWeek();
+        setupEventListeners();
+      });
 
-      const themeToggle = document.getElementById('themeToggle');
-      themeToggle.addEventListener('click', toggleTheme);
-    }
+      // Configurar event listeners
+      function setupEventListeners() {
+        const form = document.getElementById('activityForm');
+        form.addEventListener('submit', handleFormSubmit);
 
-    // Toggle de modo oscuro
-    function toggleTheme() {
-      document.body.classList.toggle('dark-mode');
-      const isDark = document.body.classList.contains('dark-mode');
-      
-      const themeToggle = document.getElementById('themeToggle');
-      const icon = themeToggle.querySelector('.theme-icon');
-      const text = themeToggle.querySelector('span:last-child');
-      
-      if (isDark) {
-        icon.textContent = '☀️';
-        text.textContent = 'Modo Claro';
-      } else {
-        icon.textContent = '🌙';
-        text.textContent = 'Modo Oscuro';
+        const themeToggle = document.getElementById('themeToggle');
+        themeToggle.addEventListener('click', toggleTheme);
       }
 
-      // Guardar preferencia
-      localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    }
-
-    // Cargar preferencia de tema
-    function loadThemePreference() {
-      const savedTheme = localStorage.getItem('theme');
-      if (savedTheme === 'dark') {
-        document.body.classList.add('dark-mode');
+      // Toggle de modo oscuro
+      function toggleTheme() {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        
         const themeToggle = document.getElementById('themeToggle');
         const icon = themeToggle.querySelector('.theme-icon');
         const text = themeToggle.querySelector('span:last-child');
-        icon.textContent = '☀️';
-        text.textContent = 'Modo Claro';
-      }
-    }
-
-    // Obtener días seleccionados
-    function getSelectedDays() {
-      const checkboxes = document.querySelectorAll('#daysSelector input[type="checkbox"]:checked');
-      return Array.from(checkboxes).map(cb => cb.value);
-    }
-
-    // Establecer días seleccionados
-    function setSelectedDays(days) {
-      // Primero desmarcar todos
-      document.querySelectorAll('#daysSelector input[type="checkbox"]').forEach(cb => {
-        cb.checked = false;
-      });
-      
-      // Marcar los días proporcionados
-      days.forEach(day => {
-        const checkbox = document.querySelector(`#daysSelector input[value="${day}"]`);
-        if (checkbox) {
-          checkbox.checked = true;
-        }
-      });
-    }
-
-    // Manejar envío del formulario
-    async function handleFormSubmit(e) {
-      e.preventDefault();
-
-      const name = document.getElementById('activityName').value.trim();
-      const selectedDays = getSelectedDays();
-      const time = document.getElementById('activityTime').value;
-      const hours = parseInt(document.getElementById('activityHours').value) || 0;
-      const minutes = parseInt(document.getElementById('activityDuration').value) || 0;
-      const duration = hours * 60 + minutes; // Convertir a minutos totales
-
-      if (selectedDays.length === 0) {
-        alert('Por favor, selecciona al menos un día de la semana');
-        return;
-      }
-
-      if (duration === 0) {
-        alert('Por favor, ingresa una duración válida (horas y/o minutos)');
-        return;
-      }
-
-      if (editingId !== null) {
-        // Modo edición - eliminar la actividad antigua
-        await deleteActivityById(editingId, false);
-        editingId = null;
-        document.getElementById('submitBtn').textContent = 'Agregar Actividad';
-      }
-
-      // Crear actividades para cada día seleccionado
-      const newActivities = selectedDays.map(day => ({
-        id: Date.now() + Math.random().toString(), // ID único para cada actividad
-        name,
-        day,
-        time,
-        duration
-      }));
-
-      await saveActivities(newActivities);
-      await loadActivities();
-      renderWeek();
-      e.target.reset();
-
-      // Desmarcar todos los checkboxes
-      setSelectedDays([]);
-    }
-
-    // Guardar actividades en el servidor
-    async function saveActivities(newActivities) {
-      try {
-        const response = await fetch(`${API_URL}/activities`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(newActivities)
-        });
-
-        if (!response.ok) {
-          throw new Error('Error al guardar actividades');
-        }
-
-        return await response.json();
-      } catch (error) {
-        console.error('Error saving activities:', error);
-        alert('Error al guardar las actividades. Por favor, intenta de nuevo.');
-      }
-    }
-
-    // Cargar actividades desde el servidor
-    async function loadActivities() {
-      try {
-        const response = await fetch(`${API_URL}/activities`);
-
-        if (!response.ok) {
-          throw new Error('Error al cargar actividades');
-        }
-
-        activities = await response.json();
-      } catch (error) {
-        console.error('Error loading activities:', error);
-        // Si hay error, intentar cargar desde localStorage como fallback
-        const stored = localStorage.getItem('weeklyActivities');
-        if (stored) {
-          activities = JSON.parse(stored);
-          // Si hay datos en localStorage, intentar migrarlos al servidor
-          if (activities.length > 0) {
-            await saveActivities(activities);
-          }
+        
+        if (isDark) {
+          icon.textContent = '☀️';
+          text.textContent = 'Modo Claro';
         } else {
-          activities = [];
+          icon.textContent = '🌙';
+          text.textContent = 'Modo Oscuro';
+        }
+
+        // Guardar preferencia
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      }
+
+      // Cargar preferencia de tema
+      function loadThemePreference() {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+          document.body.classList.add('dark-mode');
+          const themeToggle = document.getElementById('themeToggle');
+          const icon = themeToggle.querySelector('.theme-icon');
+          const text = themeToggle.querySelector('span:last-child');
+          icon.textContent = '☀️';
+          text.textContent = 'Modo Claro';
         }
       }
-    }
 
-    // Renderizar la semana completa
-    function renderWeek() {
-      const weekGrid = document.getElementById('weekGrid');
-      weekGrid.innerHTML = '';
+      // Obtener días seleccionados
+      function getSelectedDays() {
+        const checkboxes = document.querySelectorAll('#daysSelector input[type="checkbox"]:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+      }
 
-      daysOfWeek.forEach(day => {
-        const dayCard = createDayCard(day);
-        weekGrid.appendChild(dayCard);
-      });
-    }
-
-    // Crear tarjeta de día
-    function createDayCard(day) {
-      const card = document.createElement('div');
-      card.className = 'day-card';
-
-      const header = document.createElement('div');
-      header.className = 'day-header';
-      header.textContent = day;
-
-      const activityList = document.createElement('div');
-      activityList.className = 'activity-list';
-
-      // Filtrar y ordenar actividades para este día (de más temprano a más tarde)
-      const dayActivities = activities
-        .filter(a => a.day === day)
-        .sort((a, b) => {
-          // Convertir tiempo a minutos para comparación precisa
-          const timeA = timeToMinutes(a.time);
-          const timeB = timeToMinutes(b.time);
-          return timeA - timeB;
+      // Establecer días seleccionados
+      function setSelectedDays(days) {
+        // Primero desmarcar todos
+        document.querySelectorAll('#daysSelector input[type="checkbox"]').forEach(cb => {
+          cb.checked = false;
         });
-
-      if (dayActivities.length === 0) {
-        const emptyMessage = document.createElement('div');
-        emptyMessage.className = 'empty-day';
-        emptyMessage.textContent = 'Sin actividades';
-        activityList.appendChild(emptyMessage);
-      } else {
-        dayActivities.forEach(activity => {
-          const activityItem = createActivityItem(activity);
-          activityList.appendChild(activityItem);
+        
+        // Marcar los días proporcionados
+        days.forEach(day => {
+          const checkbox = document.querySelector(`#daysSelector input[value="${day}"]`);
+          if (checkbox) {
+            checkbox.checked = true;
+          }
         });
       }
 
-      card.appendChild(header);
-      card.appendChild(activityList);
+      // Manejar envío del formulario
+      async function handleFormSubmit(e) {
+        e.preventDefault();
 
-      return card;
-    }
+        const name = document.getElementById('activityName').value.trim();
+        const selectedDays = getSelectedDays();
+        const time = document.getElementById('activityTime').value;
+        const hours = parseInt(document.getElementById('activityHours').value) || 0;
+        const minutes = parseInt(document.getElementById('activityDuration').value) || 0;
+        const duration = hours * 60 + minutes; // Convertir a minutos totales
 
-    // Convertir tiempo a minutos para ordenamiento
-    function timeToMinutes(time) {
-      const [hours, minutes] = time.split(':').map(Number);
-      return hours * 60 + minutes;
-    }
+        if (selectedDays.length === 0) {
+          alert('Por favor, selecciona al menos un día de la semana');
+          return;
+        }
 
-    // Crear elemento de actividad
-    function createActivityItem(activity) {
-      const item = document.createElement('div');
-      item.className = 'activity-item';
+        if (duration === 0) {
+          alert('Por favor, ingresa una duración válida (horas y/o minutos)');
+          return;
+        }
 
-      const name = document.createElement('div');
-      name.className = 'activity-name';
-      name.textContent = activity.name;
+        if (editingId !== null) {
+          // Modo edición - eliminar la actividad antigua
+          await deleteActivityById(editingId, false);
+          editingId = null;
+          document.getElementById('submitBtn').textContent = 'Agregar Actividad';
+        }
 
-      const time = document.createElement('div');
-      time.className = 'activity-time';
-      time.textContent = `⏰ ${formatTime(activity.time)}`;
+        // Crear actividades para cada día seleccionado
+        const newActivities = selectedDays.map(day => ({
+          id: Date.now() + Math.random().toString(), // ID único para cada actividad
+          name,
+          day,
+          time,
+          duration
+        }));
 
-      const duration = document.createElement('div');
-      duration.className = 'activity-duration';
-      duration.textContent = `⏱️ Duración: ${formatDuration(activity.duration)}`;
+        await saveActivities(newActivities);
+        await loadActivities();
+        renderWeek();
+        e.target.reset();
 
-      const actions = document.createElement('div');
-      actions.className = 'activity-actions';
-
-      const editBtn = document.createElement('button');
-      editBtn.className = 'btn btn-edit';
-      editBtn.textContent = 'Editar';
-      editBtn.onclick = () => editActivity(activity.id);
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn btn-danger';
-      deleteBtn.textContent = 'Eliminar';
-      deleteBtn.onclick = () => deleteActivity(activity.id);
-
-      actions.appendChild(editBtn);
-      actions.appendChild(deleteBtn);
-
-      item.appendChild(name);
-      item.appendChild(time);
-      item.appendChild(duration);
-      item.appendChild(actions);
-
-      return item;
-    }
-
-    // Formatear hora a formato 12 horas
-    function formatTime(time) {
-      const [hours, minutes] = time.split(':').map(Number);
-      const period = hours >= 12 ? 'PM' : 'AM';
-      const displayHours = hours % 12 || 12;
-      return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-    }
-
-    // Formatear duración a formato legible
-    function formatDuration(totalMinutes) {
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-
-      if (hours === 0) {
-        return `${minutes} min`;
-      } else if (minutes === 0) {
-        return `${hours}h`;
-      } else {
-        return `${hours}h ${minutes}min`;
+        // Desmarcar todos los checkboxes
+        setSelectedDays([]);
       }
-    }
 
-    // Editar actividad
-    function editActivity(id) {
-      const activity = activities.find(a => a.id === id);
-      if (activity) {
-        document.getElementById('activityName').value = activity.name;
-        document.getElementById('activityTime').value = activity.time;
+      // Guardar actividades en el servidor
+      async function saveActivities(newActivities) {
+        try {
+          const response = await fetch(`${API_URL}/activities`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(newActivities)
+          });
 
-        // Separar la duración en horas y minutos
-        const totalMinutes = activity.duration;
+          if (!response.ok) {
+            throw new Error('Error al guardar actividades');
+          }
+
+          return await response.json();
+        } catch (error) {
+          console.error('Error saving activities:', error);
+          alert('Error al guardar las actividades. Por favor, intenta de nuevo.');
+        }
+      }
+
+      // Cargar actividades desde el servidor
+      async function loadActivities() {
+        try {
+          const response = await fetch(`${API_URL}/activities`);
+
+          if (!response.ok) {
+            throw new Error('Error al cargar actividades');
+          }
+
+          activities = await response.json();
+        } catch (error) {
+          console.error('Error loading activities:', error);
+          // Si hay error, intentar cargar desde localStorage como fallback
+          const stored = localStorage.getItem('weeklyActivities');
+          if (stored) {
+            activities = JSON.parse(stored);
+            // Si hay datos en localStorage, intentar migrarlos al servidor
+            if (activities.length > 0) {
+              await saveActivities(activities);
+            }
+          } else {
+            activities = [];
+          }
+        }
+      }
+
+      // Renderizar la semana completa
+      function renderWeek() {
+        const weekGrid = document.getElementById('weekGrid');
+        weekGrid.innerHTML = '';
+
+        daysOfWeek.forEach(day => {
+          const dayCard = createDayCard(day);
+          weekGrid.appendChild(dayCard);
+        });
+      }
+
+      // Crear tarjeta de día
+      function createDayCard(day) {
+        const card = document.createElement('div');
+        card.className = 'day-card';
+
+        const header = document.createElement('div');
+        header.className = 'day-header';
+        header.textContent = day;
+
+        const activityList = document.createElement('div');
+        activityList.className = 'activity-list';
+
+        // Filtrar y ordenar actividades para este día (de más temprano a más tarde)
+        const dayActivities = activities
+          .filter(a => a.day === day)
+          .sort((a, b) => {
+            // Convertir tiempo a minutos para comparación precisa
+            const timeA = timeToMinutes(a.time);
+            const timeB = timeToMinutes(b.time);
+            return timeA - timeB;
+          });
+
+        if (dayActivities.length === 0) {
+          const emptyMessage = document.createElement('div');
+          emptyMessage.className = 'empty-day';
+          emptyMessage.textContent = 'Sin actividades';
+          activityList.appendChild(emptyMessage);
+        } else {
+          dayActivities.forEach(activity => {
+            const activityItem = createActivityItem(activity);
+            activityList.appendChild(activityItem);
+          });
+        }
+
+        card.appendChild(header);
+        card.appendChild(activityList);
+
+        return card;
+      }
+
+      // Convertir tiempo a minutos para ordenamiento
+      function timeToMinutes(time) {
+        const [hours, minutes] = time.split(':').map(Number);
+        return hours * 60 + minutes;
+      }
+
+      // Crear elemento de actividad
+      function createActivityItem(activity) {
+        const item = document.createElement('div');
+        item.className = 'activity-item';
+
+        const name = document.createElement('div');
+        name.className = 'activity-name';
+        name.textContent = activity.name;
+
+        const time = document.createElement('div');
+        time.className = 'activity-time';
+        time.textContent = `⏰ ${formatTime(activity.time)}`;
+
+        const duration = document.createElement('div');
+        duration.className = 'activity-duration';
+        duration.textContent = `⏱️ Duración: ${formatDuration(activity.duration)}`;
+
+        const actions = document.createElement('div');
+        actions.className = 'activity-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-edit';
+        editBtn.textContent = 'Editar';
+        editBtn.onclick = () => editActivity(activity.id);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-danger';
+        deleteBtn.textContent = 'Eliminar';
+        deleteBtn.onclick = () => deleteActivity(activity.id);
+
+        actions.appendChild(editBtn);
+        actions.appendChild(deleteBtn);
+
+        item.appendChild(name);
+        item.appendChild(time);
+        item.appendChild(duration);
+        item.appendChild(actions);
+
+        return item;
+      }
+
+      // Formatear hora a formato 12 horas
+      function formatTime(time) {
+        const [hours, minutes] = time.split(':').map(Number);
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const displayHours = hours % 12 || 12;
+        return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+      }
+
+      // Formatear duración a formato legible
+      function formatDuration(totalMinutes) {
         const hours = Math.floor(totalMinutes / 60);
         const minutes = totalMinutes % 60;
 
-        document.getElementById('activityHours').value = hours;
-        document.getElementById('activityDuration').value = minutes;
-
-        // Buscar todas las actividades con el mismo nombre, hora y duración
-        const relatedActivities = activities.filter(a =>
-          a.name === activity.name &&
-          a.time === activity.time &&
-          a.duration === activity.duration
-        );
-
-        // Seleccionar los días correspondientes
-        const days = relatedActivities.map(a => a.day);
-        setSelectedDays(days);
-
-        editingId = id;
-        document.getElementById('submitBtn').textContent = 'Actualizar Actividad';
-
-        // Scroll al formulario
-        document.querySelector('.form-section').scrollIntoView({ behavior: 'smooth' });
-      }
-    }
-
-    // Eliminar actividad por ID (función auxiliar)
-    async function deleteActivityById(id, confirm = true) {
-      try {
-        const response = await fetch(`${API_URL}/activities/${id}`, {
-          method: 'DELETE'
-        });
-
-        if (!response.ok) {
-          throw new Error('Error al eliminar actividad');
-        }
-
-        return true;
-      } catch (error) {
-        console.error('Error deleting activity:', error);
-        alert('Error al eliminar la actividad. Por favor, intenta de nuevo.');
-        return false;
-      }
-    }
-
-    // Eliminar múltiples actividades
-    async function deleteMultipleActivities(ids) {
-      try {
-        const response = await fetch(`${API_URL}/activities/delete-multiple`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ids })
-        });
-
-        if (!response.ok) {
-          throw new Error('Error al eliminar actividades');
-        }
-
-        return true;
-      } catch (error) {
-        console.error('Error deleting multiple activities:', error);
-        alert('Error al eliminar las actividades. Por favor, intenta de nuevo.');
-        return false;
-      }
-    }
-
-    // Eliminar actividad
-    async function deleteActivity(id) {
-      const activity = activities.find(a => a.id === id);
-
-      if (activity) {
-        // Buscar todas las actividades relacionadas (mismo nombre, hora y duración)
-        const relatedActivities = activities.filter(a =>
-          a.name === activity.name &&
-          a.time === activity.time &&
-          a.duration === activity.duration
-        );
-
-        let success = false;
-
-        if (relatedActivities.length > 1) {
-          const confirmMsg = `Esta actividad se repite en ${relatedActivities.length} días. ¿Deseas eliminarla de todos los días o solo de ${activity.day}?`;
-          const deleteAll = confirm(confirmMsg + '\n\nAceptar = Eliminar de todos los días\nCancelar = Eliminar solo de ' + activity.day);
-
-          if (deleteAll) {
-            // Eliminar de todos los días
-            const idsToDelete = relatedActivities.map(a => a.id);
-            success = await deleteMultipleActivities(idsToDelete);
-          } else {
-            // Eliminar solo de este día
-            success = await deleteActivityById(id);
-          }
+        if (hours === 0) {
+          return `${minutes} min`;
+        } else if (minutes === 0) {
+          return `${hours}h`;
         } else {
-          // Solo existe en un día, eliminar directamente
-          if (confirm('¿Estás seguro de que deseas eliminar esta actividad?')) {
-            success = await deleteActivityById(id);
-          } else {
-            return;
-          }
+          return `${hours}h ${minutes}min`;
         }
+      }
 
-        if (success) {
-          await loadActivities();
-          renderWeek();
+      // Editar actividad
+      function editActivity(id) {
+        const activity = activities.find(a => a.id === id);
+        if (activity) {
+          document.getElementById('activityName').value = activity.name;
+          document.getElementById('activityTime').value = activity.time;
 
-          // Si estábamos editando esta actividad, cancelar edición
-          if (editingId === id) {
-            editingId = null;
-            document.getElementById('activityForm').reset();
-            setSelectedDays([]);
-            document.getElementById('submitBtn').textContent = 'Agregar Actividad';
+          // Separar la duración en horas y minutos
+          const totalMinutes = activity.duration;
+          const hours = Math.floor(totalMinutes / 60);
+          const minutes = totalMinutes % 60;
+
+          document.getElementById('activityHours').value = hours;
+          document.getElementById('activityDuration').value = minutes;
+
+          // Buscar todas las actividades con el mismo nombre, hora y duración
+          const relatedActivities = activities.filter(a =>
+            a.name === activity.name &&
+            a.time === activity.time &&
+            a.duration === activity.duration
+          );
+
+          // Seleccionar los días correspondientes
+          const days = relatedActivities.map(a => a.day);
+          setSelectedDays(days);
+
+          editingId = id;
+          document.getElementById('submitBtn').textContent = 'Actualizar Actividad';
+
+          // Scroll al formulario
+          document.querySelector('.form-section').scrollIntoView({ behavior: 'smooth' });
+        }
+      }
+
+      // Eliminar actividad por ID (función auxiliar)
+      async function deleteActivityById(id, confirm = true) {
+        try {
+          const response = await fetch(`${API_URL}/activities/${id}`, {
+            method: 'DELETE'
+          });
+
+          if (!response.ok) {
+            throw new Error('Error al eliminar actividad');
+          }
+
+          return true;
+        } catch (error) {
+          console.error('Error deleting activity:', error);
+          alert('Error al eliminar la actividad. Por favor, intenta de nuevo.');
+          return false;
+        }
+      }
+
+      // Eliminar múltiples actividades
+      async function deleteMultipleActivities(ids) {
+        try {
+          const response = await fetch(`${API_URL}/activities/delete-multiple`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ids })
+          });
+
+          if (!response.ok) {
+            throw new Error('Error al eliminar actividades');
+          }
+
+          return true;
+        } catch (error) {
+          console.error('Error deleting multiple activities:', error);
+          alert('Error al eliminar las actividades. Por favor, intenta de nuevo.');
+          return false;
+        }
+      }
+
+      // Eliminar actividad
+      async function deleteActivity(id) {
+        const activity = activities.find(a => a.id === id);
+
+        if (activity) {
+          // Buscar todas las actividades relacionadas (mismo nombre, hora y duración)
+          const relatedActivities = activities.filter(a =>
+            a.name === activity.name &&
+            a.time === activity.time &&
+            a.duration === activity.duration
+          );
+
+          let success = false;
+
+          if (relatedActivities.length > 1) {
+            const confirmMsg = `Esta actividad se repite en ${relatedActivities.length} días. ¿Deseas eliminarla de todos los días o solo de ${activity.day}?`;
+            const deleteAll = confirm(confirmMsg + '\n\nAceptar = Eliminar de todos los días\nCancelar = Eliminar solo de ' + activity.day);
+
+            if (deleteAll) {
+              // Eliminar de todos los días
+              const idsToDelete = relatedActivities.map(a => a.id);
+              success = await deleteMultipleActivities(idsToDelete);
+            } else {
+              // Eliminar solo de este día
+              success = await deleteActivityById(id);
+            }
+          } else {
+            // Solo existe en un día, eliminar directamente
+            if (confirm('¿Estás seguro de que deseas eliminar esta actividad?')) {
+              success = await deleteActivityById(id);
+            } else {
+              return;
+            }
+          }
+
+          if (success) {
+            await loadActivities();
+            renderWeek();
+
+            // Si estábamos editando esta actividad, cancelar edición
+            if (editingId === id) {
+              editingId = null;
+              document.getElementById('activityForm').reset();
+              setSelectedDays([]);
+              document.getElementById('submitBtn').textContent = 'Agregar Actividad';
+            }
           }
         }
       }
-    }
+    })();
   </script>
 </body>
 </html>
