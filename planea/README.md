@@ -138,6 +138,36 @@ depender de credenciales ni de datos reales. La integración real con la Gmail
 API vía OAuth 2.0 se conecta implementando la interfaz `EmailProvider` de
 `modules/email-sync/provider.ts`; el resto del flujo no cambia.
 
+### Conectar Gmail de verdad
+
+Opcional: sin esto la app funciona con la bandeja simulada.
+
+1. En [Google Cloud Console](https://console.cloud.google.com) crea un proyecto
+   y activa la **API de Gmail**.
+2. En **APIs y servicios → Pantalla de consentimiento**, elige tipo **Externo**,
+   déjala en modo **Prueba** y añade tu propio correo en *Usuarios de prueba*.
+3. En **Credenciales**, crea un *ID de cliente de OAuth* de tipo
+   **Aplicación de escritorio**. Este tipo usa `http://127.0.0.1` como destino,
+   así que no hay que registrar ningún dominio.
+4. Copia el ID y el secreto a tu `.env` como `GOOGLE_CLIENT_ID` y
+   `GOOGLE_CLIENT_SECRET`.
+5. Ejecuta una sola vez:
+
+   ```bash
+   node scripts/gmail-refresh-token.mjs
+   ```
+
+   Abre la URL que imprime, autoriza el acceso y pega en el `.env` el
+   `GOOGLE_REFRESH_TOKEN` que devuelve.
+
+> Mientras la pantalla de consentimiento siga en modo **Prueba**, Google caduca
+> el refresh token a los 7 días y habrá que volver a generarlo. Para que dure,
+> hay que publicar la aplicación; con el permiso `gmail.readonly` eso exige
+> pasar la verificación de Google.
+
+El permiso solicitado es `gmail.readonly`: la app solo lee correos, nunca
+envía ni modifica nada.
+
 ## Privacidad financiera
 
 Cada persona decide, **grupo por grupo**, si comparte sus finanzas. Cuando las
