@@ -7,20 +7,73 @@ capacidad financiera, no dividiendo en partes iguales.
 
 ## Cómo correrlo
 
-Necesitas **Node.js 20+** y **Docker** (o un PostgreSQL 16 propio).
+Necesitas **Node.js 20+** y una base **PostgreSQL 16**. Elige abajo cómo
+conseguir la base; el resto de los pasos es el mismo en todos los casos.
+
+### 1. Copia el archivo de entorno
+
+macOS y Linux:
 
 ```bash
 cd planea
-cp .env.example .env          # los valores por defecto funcionan tal cual
-docker compose up -d          # levanta PostgreSQL en el puerto 5432
+cp .env.example .env
+```
+
+Windows (símbolo del sistema, `cmd`):
+
+```bat
+cd planea
+copy .env.example .env
+```
+
+Windows (PowerShell):
+
+```powershell
+cd planea
+Copy-Item .env.example .env
+```
+
+> `copy` es de `cmd` y `Copy-Item` es de PowerShell: usa el que corresponda a
+> la terminal que tengas abierta, o los comandos fallarán con «no se reconoce
+> como un comando interno o externo».
+
+### 2. Levanta PostgreSQL
+
+**Opción A — Docker** (la más rápida si ya lo tienes instalado y abierto):
+
+```bash
+docker compose up -d
+```
+
+Los valores por defecto del `.env` ya apuntan a esta base, no hay nada que
+cambiar.
+
+**Opción B — PostgreSQL instalado en tu equipo.** Instálalo desde
+[postgresql.org/download](https://www.postgresql.org/download/), crea la base y
+el usuario, y ajusta `DATABASE_URL` en el `.env`:
+
+```sql
+CREATE USER planea WITH PASSWORD 'planea' CREATEDB;
+CREATE DATABASE planea_dev OWNER planea;
+```
+
+**Opción C — Base en la nube, sin instalar nada.** Crea un proyecto gratuito en
+[Supabase](https://supabase.com) o [Neon](https://neon.tech), copia la cadena de
+conexión que te dan y pégala en `DATABASE_URL` dentro del `.env`. Debe verse
+parecida a:
+
+```
+DATABASE_URL="postgresql://usuario:contraseña@host:5432/postgres?sslmode=require"
+```
+
+### 3. Instala, prepara la base y arranca
+
+```bash
 npm install
 npm run db:push               # crea las tablas
 npm run db:seed               # carga datos de demostración
 npm run dev                   # http://localhost:3000
 ```
-
-Si ya tienes PostgreSQL, omite `docker compose up -d` y ajusta `DATABASE_URL`
-en el `.env`.
 
 ### Usuarios de demostración
 
