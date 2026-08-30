@@ -36,3 +36,8 @@ coverage/
 *.pid
 *.seed
 *.pid.lock
+
+# Configuración local de servidores MCP.
+# Este repositorio es público y .mcp.json lleva el identificador del proyecto
+# Supabase; cada quien lo añade en su máquina con `claude mcp add`.
+.mcp.json
