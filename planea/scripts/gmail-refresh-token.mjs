@@ -35,6 +35,30 @@ function readEnvFile() {
   return out;
 }
 
+/**
+ * Guarda el refresh token en el .env: sustituye la línea si ya existe y la
+ * añade si no. Así el token no tiene que pasar por el portapapeles ni por un
+ * chat, donde quedaría expuesto.
+ */
+function writeRefreshToken(token) {
+  const file = path.join(ROOT, ".env");
+  const line = `GOOGLE_REFRESH_TOKEN="${token}"`;
+  const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+  const eol = existing.includes("\r\n") ? "\r\n" : "\n";
+  // Sin `\s`: en JavaScript `\r` cuenta como fin de línea para `^`, así que
+  // `\s*` cruzaría el salto y rompería los separadores en archivos CRLF.
+  const pattern = /^[ \t]*GOOGLE_REFRESH_TOKEN[ \t]*=.*$/m;
+
+  const updated = pattern.test(existing)
+    ? existing.replace(pattern, line)
+    : (existing && !existing.endsWith("\n") ? existing + eol : existing) +
+      line +
+      eol;
+
+  fs.writeFileSync(file, updated, "utf8");
+  return file;
+}
+
 const env = { ...readEnvFile(), ...process.env };
 const clientId = env.GOOGLE_CLIENT_ID;
 const clientSecret = env.GOOGLE_CLIENT_SECRET;
@@ -146,15 +170,34 @@ vuelve a ejecutar este script.
       process.exit(1);
     }
 
-    console.log(`
-✅ Refresh token obtenido.
+    let saved;
+    try {
+      saved = writeRefreshToken(tokens.refresh_token);
+    } catch (e) {
+      console.error(`
+⚠️  Se obtuvo el token pero no se pudo escribir el .env: ${e.message}
 
-Añade esta línea a planea/.env:
+Añade esta línea a mano en planea/.env:
 
 GOOGLE_REFRESH_TOKEN="${tokens.refresh_token}"
+`);
+      server.close();
+      process.exit(1);
+    }
 
-Luego reinicia el servidor (Ctrl+C y npm run dev) y prueba «Sincronizar»
-en la pantalla de Cuentas.
+    // El token no se imprime: quien lo tenga puede leer el correo autorizado.
+    console.log(`
+✅ Refresh token obtenido y guardado en:
+   ${saved}
+
+No se muestra en pantalla a propósito: cualquiera que lo copie podría leer
+ese buzón. Trátalo como una contraseña y no lo compartas.
+
+Ahora detén el servidor (Ctrl+C) y vuelve a arrancarlo para que lea el .env:
+
+   npm run dev
+
+Luego prueba «Sincronizar» en la pantalla de Cuentas.
 `);
     server.close();
     process.exit(0);
