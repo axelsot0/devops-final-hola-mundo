@@ -58,13 +58,27 @@ CREATE DATABASE planea_dev OWNER planea;
 ```
 
 **Opción C — Base en la nube, sin instalar nada.** Crea un proyecto gratuito en
-[Supabase](https://supabase.com) o [Neon](https://neon.tech), copia la cadena de
-conexión que te dan y pégala en `DATABASE_URL` dentro del `.env`. Debe verse
-parecida a:
+[Supabase](https://supabase.com) o [Neon](https://neon.tech) y pega su cadena de
+conexión en `DATABASE_URL` dentro del `.env`.
+
+En Supabase, dentro de tu proyecto:
+
+1. Pulsa **Connect** en la barra superior.
+2. En la lista de cadenas elige la de **Session pooler** — su host contiene
+   `pooler.supabase.com` y termina en el puerto `5432`.
+3. Cópiala y sustituye `[YOUR-PASSWORD]` por la contraseña que definiste al
+   crear el proyecto. Queda parecida a:
 
 ```
-DATABASE_URL="postgresql://usuario:contraseña@host:5432/postgres?sslmode=require"
+DATABASE_URL="postgresql://postgres.abcdefgh:TU-CLAVE@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
 ```
+
+> Dos avisos que ahorran un rato de depuración. **No uses la cadena del
+> «Transaction pooler» (puerto 6543)** para preparar la base: usa sentencias
+> preparadas de forma incompatible con `prisma db push` y el comando falla.
+> Y la **«Direct connection»** (host `db.xxxx.supabase.co`) en proyectos
+> nuevos solo responde por IPv6, que muchas redes domésticas no alcanzan; por
+> eso el Session pooler es la opción segura.
 
 ### 3. Instala, prepara la base y arranca
 

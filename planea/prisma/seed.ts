@@ -188,7 +188,40 @@ function dayInMonth(offset: number, day: number) {
   return new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), day, 12 + Math.floor(rand() * 8), Math.floor(rand() * 60)));
 }
 
+/**
+ * El seed vacía las tablas antes de cargar los datos de demostración. Eso es
+ * inofensivo en una base local, pero destructivo si alguien apunta el `.env` a
+ * una base remota que ya tiene información. Aquí se bloquea ese caso salvo que
+ * se pida explícitamente con SEED_FORCE=1.
+ */
+async function assertSafeToSeed() {
+  const url = process.env.DATABASE_URL ?? "";
+  const isLocal = /@(localhost|127\.0\.0\.1|host\.docker\.internal)[:/]/.test(url);
+  if (isLocal || process.env.SEED_FORCE === "1") return;
+
+  const existingUsers = await db.user.count();
+  if (existingUsers === 0) return;
+
+  const host = url.replace(/\/\/[^@]*@/, "//***@");
+  console.error(
+    [
+      "",
+      "⛔ La base de datos no es local y ya contiene información.",
+      `   Destino: ${host}`,
+      `   Usuarios existentes: ${existingUsers}`,
+      "",
+      "   Este seed borra todas las tablas antes de cargar los datos de",
+      "   demostración. Si de verdad quieres reemplazar su contenido, vuelve",
+      "   a ejecutarlo con SEED_FORCE=1.",
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+
 async function main() {
+  await assertSafeToSeed();
+
   console.log("🌱 Limpiando datos previos…");
   await db.planContribution.deleteMany();
   await db.planMember.deleteMany();
