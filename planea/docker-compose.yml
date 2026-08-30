@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: planea-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: planea
+      POSTGRES_PASSWORD: planea
+      POSTGRES_DB: planea_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - planea-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planea -d planea_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  planea-db-data:

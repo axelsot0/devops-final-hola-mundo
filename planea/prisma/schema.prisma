@@ -1,0 +1,351 @@
+generator client {
+  provider = "prisma-client-js"
+  // Ruta explícita dentro del proyecto: los bundlers (Turbopack) no resuelven
+  // de forma fiable el cliente generado dentro de node_modules.
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Usuarios y autenticación
+// ─────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  image        String?
+  currency     String   @default("DOP")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  accounts          Account[]
+  transactions      Transaction[]
+  categories        Category[]
+  recurringPayments RecurringPayment[]
+  budgets           Budget[]
+  goals             SavingsGoal[]
+  memberships       GroupMember[]
+  groupsCreated     Group[]            @relation("GroupCreator")
+  invitationsMade   GroupInvitation[]
+  plansCreated      GroupPlan[]
+  planMemberships   PlanMember[]
+  resetTokens       PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// ─────────────────────────────────────────────
+// Entidades bancarias y cuentas conectadas
+// ─────────────────────────────────────────────
+
+model BankEntity {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  slug            String   @unique
+  color           String?
+  // Reglas para identificar los correos financieros de la entidad
+  senderAddresses String[]
+  senderDomains   String[]
+  subjectPatterns String[]
+  keywords        String[]
+  // Clave del parser que entiende el formato esperado del mensaje
+  parserKey       String   @default("generic")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  accounts Account[]
+}
+
+enum AccountStatus {
+  CONNECTED
+  SYNCING
+  ERROR
+  DISCONNECTED
+}
+
+model Account {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email       String
+  bankId      String
+  bank        BankEntity    @relation(fields: [bankId], references: [id])
+  nickname    String?
+  status      AccountStatus @default(CONNECTED)
+  connectedAt DateTime      @default(now())
+  lastSyncAt  DateTime?
+
+  transactions Transaction[]
+  emails       EmailMessage[]
+
+  @@unique([userId, email, bankId])
+}
+
+// Referencia al correo original desde el que se detectó una transacción
+model EmailMessage {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  externalId  String
+  fromAddress String
+  subject     String
+  snippet     String?
+  receivedAt  DateTime
+  processedAt DateTime @default(now())
+
+  transaction Transaction?
+
+  @@unique([accountId, externalId])
+}
+
+// ─────────────────────────────────────────────
+// Transacciones y categorías
+// ─────────────────────────────────────────────
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionSource {
+  EMAIL
+  MANUAL
+}
+
+model Category {
+  id       String  @id @default(cuid())
+  name     String
+  slug     String
+  icon     String?
+  color    String?
+  isSystem Boolean @default(false)
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactions      Transaction[]
+  recurringPayments RecurringPayment[]
+
+  @@unique([userId, slug])
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId   String?
+  account     Account?          @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  type        TransactionType
+  amount      Decimal           @db.Decimal(14, 2)
+  currency    String            @default("DOP")
+  merchant    String?
+  description String?
+  date        DateTime
+  categoryId  String?
+  category    Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  source      TransactionSource @default(MANUAL)
+  externalRef String?
+  emailId     String?           @unique
+  email       EmailMessage?     @relation(fields: [emailId], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([userId, date])
+  @@index([userId, categoryId])
+}
+
+// ─────────────────────────────────────────────
+// Presupuesto y pagos recurrentes
+// ─────────────────────────────────────────────
+
+enum Periodicity {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum RecurringStatus {
+  ACTIVE
+  PAUSED
+}
+
+model RecurringPayment {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  categoryId  String?
+  category    Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  amount      Decimal         @db.Decimal(14, 2)
+  periodicity Periodicity     @default(MONTHLY)
+  nextDueDate DateTime
+  accountId   String?
+  status      RecurringStatus @default(ACTIVE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+// Presupuesto mensual (sugerido por el sistema, editable por el usuario)
+model Budget {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year             Int
+  month            Int
+  income           Decimal  @db.Decimal(14, 2)
+  recurringExpenses Decimal @db.Decimal(14, 2)
+  variableExpenses Decimal  @db.Decimal(14, 2)
+  savings          Decimal  @db.Decimal(14, 2)
+  isAutoGenerated  Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, year, month])
+}
+
+// ─────────────────────────────────────────────
+// Metas de ahorro personales
+// ─────────────────────────────────────────────
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+}
+
+model SavingsGoal {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  targetAmount Decimal    @db.Decimal(14, 2)
+  savedAmount  Decimal    @db.Decimal(14, 2) @default(0)
+  targetDate   DateTime?
+  status       GoalStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Grupos, membresías e invitaciones
+// ─────────────────────────────────────────────
+
+enum GroupRole {
+  ADMIN
+  MEMBER
+}
+
+// Privacidad financiera: se controla por grupo, no globalmente
+enum PrivacyMode {
+  PRIVATE
+  SHARED
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  emoji       String?
+  createdById String
+  createdBy   User     @relation("GroupCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     GroupMember[]
+  invitations GroupInvitation[]
+  plans       GroupPlan[]
+}
+
+model GroupMember {
+  id       String      @id @default(cuid())
+  groupId  String
+  group    Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     GroupRole   @default(MEMBER)
+  privacy  PrivacyMode @default(PRIVATE)
+  joinedAt DateTime    @default(now())
+
+  @@unique([groupId, userId])
+}
+
+model GroupInvitation {
+  id          String    @id @default(cuid())
+  groupId     String
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+}
+
+// ─────────────────────────────────────────────
+// Planes de ahorro grupales
+// ─────────────────────────────────────────────
+
+enum PlanStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model GroupPlan {
+  id           String     @id @default(cuid())
+  groupId      String
+  group        Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  targetAmount Decimal    @db.Decimal(14, 2)
+  targetDate   DateTime
+  status       PlanStatus @default(ACTIVE)
+  createdById  String
+  createdBy    User       @relation(fields: [createdById], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  members PlanMember[]
+}
+
+model PlanMember {
+  id                 String  @id @default(cuid())
+  planId             String
+  plan               GroupPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Aporte mensual recomendado según capacidad financiera
+  recommendedMonthly Decimal @db.Decimal(14, 2)
+  // Proporción de la capacidad total del grupo (0-1) usada para explicar el cálculo
+  capacityShare      Decimal @db.Decimal(6, 5)
+  rationale          String?
+
+  contributions PlanContribution[]
+
+  @@unique([planId, userId])
+}
+
+model PlanContribution {
+  id           String     @id @default(cuid())
+  planMemberId String
+  planMember   PlanMember @relation(fields: [planMemberId], references: [id], onDelete: Cascade)
+  amount       Decimal    @db.Decimal(14, 2)
+  date         DateTime   @default(now())
+  note         String?
+}

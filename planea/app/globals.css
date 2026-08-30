@@ -1,0 +1,96 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  /* Paleta de marca Planea */
+  --background: #e8e8e8;
+  --foreground: #292929;
+  --card: #ffffff;
+  --card-foreground: #292929;
+  --popover: #ffffff;
+  --popover-foreground: #292929;
+  --primary: #3e9b94;
+  --primary-foreground: #ffffff;
+  --secondary: #7bcdc7;
+  --secondary-foreground: #14433f;
+  --muted: #f2f2f2;
+  --muted-foreground: #6f6f6f;
+  --accent: #e2f4f2;
+  --accent-foreground: #206b48;
+  --destructive: #d64545;
+  --destructive-foreground: #ffffff;
+  --success: #206b48;
+  --success-foreground: #ffffff;
+  --border: #dddddd;
+  --input: #d4d4d4;
+  --ring: #3e9b94;
+  --chart-1: #3e9b94;
+  --chart-2: #7bcdc7;
+  --chart-3: #206b48;
+  --chart-4: #f0b75b;
+  --chart-5: #e0755b;
+  --chart-6: #5b8db8;
+  --chart-7: #9b7bc9;
+  --chart-8: #c9678f;
+  --chart-9: #8a9a5b;
+  --chart-10: #a1a1a1;
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 10px);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Scrollbars discretos para listas internas */
+.thin-scroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--input);
+  border-radius: 9999px;
+}
