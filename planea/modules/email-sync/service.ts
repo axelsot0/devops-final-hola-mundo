@@ -1,177 +1,88 @@
 import { db } from "@/lib/db";
+import { bankRulesChanged, withRequiredBankRules } from "./bank-rules";
 import { inferCategorySlug } from "./categorize";
+import { getCredentialById, markCredentialRevoked } from "./credentials";
+import { createGmailProvider } from "./gmail-provider";
+import { GmailAuthorizationError } from "./gmail-oauth";
 import { matchesBankRules, parseBankEmail } from "./parser";
 import type { EmailProvider } from "./provider";
-
-const REQUIRED_BANK_RULES_BY_SLUG = {
-  "banco-popular": {
-    senderAddresses: [
-      "notificaciones@popularenlinea.com",
-      "notificaciones@popularenlinea.com.do",
-    ],
-    senderDomains: ["popularenlinea.com", "popularenlinea.com.do", "bpd.com.do"],
-    subjectPatterns: [
-      "Notificación de Consumo",
-      "Notificación de transacción",
-      "Notificación de Transacción",
-      "Notificación de Depósito",
-      "Notificación de Deposito",
-      "Notificación de Crédito",
-      "Notificación de Credito",
-      "Depósito recibido",
-      "Deposito recibido",
-      "Transferencia recibida",
-      "Pago recibido",
-      "Crédito recibido",
-      "Credito recibido",
-    ],
-    keywords: [
-      "consumo",
-      "tarjeta",
-      "monto",
-      "RD$",
-      "depósito",
-      "deposito",
-      "acreditó",
-      "acredito",
-      "crédito",
-      "credito",
-      "transferencia recibida",
-      "pago recibido",
-      "nómina",
-      "nomina",
-      "salario",
-    ],
-  },
-} as const;
-
-type BankRules = {
-  id: string;
-  slug: string;
-  senderAddresses: string[];
-  senderDomains: string[];
-  subjectPatterns: string[];
-  keywords: string[];
-};
-
-function mergeUnique(values: string[], required: readonly string[]) {
-  return [...new Set([...required, ...values].map((value) => value.trim()))]
-    .filter(Boolean);
-}
-
-function ensureRequiredBankRules<T extends BankRules>(bank: T): T {
-  const required =
-    REQUIRED_BANK_RULES_BY_SLUG[
-      bank.slug as keyof typeof REQUIRED_BANK_RULES_BY_SLUG
-    ];
-
-  if (!required) return bank;
-
-  return {
-    ...bank,
-    senderAddresses: mergeUnique(
-      bank.senderAddresses,
-      required.senderAddresses,
-    ),
-    senderDomains: mergeUnique(bank.senderDomains, required.senderDomains),
-    subjectPatterns: mergeUnique(
-      bank.subjectPatterns,
-      required.subjectPatterns,
-    ),
-    keywords: mergeUnique(bank.keywords, required.keywords),
-  };
-}
-
-function rulesChanged(before: BankRules, after: BankRules) {
-  return (
-    before.senderAddresses.join("\n") !== after.senderAddresses.join("\n") ||
-    before.senderDomains.join("\n") !== after.senderDomains.join("\n") ||
-    before.subjectPatterns.join("\n") !== after.subjectPatterns.join("\n") ||
-    before.keywords.join("\n") !== after.keywords.join("\n")
-  );
-}
 
 export interface SyncResult {
   ok: boolean;
   error?: string;
+  /** El usuario tiene que volver a pulsar "Conectar Gmail". */
+  needsReauth?: boolean;
   imported: number;
   skipped: number;
   filtered: number;
 }
 
+const EMPTY_COUNTS = { imported: 0, skipped: 0, filtered: 0 };
+
 /**
- * Sincroniza una cuenta utilizando explícitamente el proveedor recibido.
+ * Las sincronizaciones siguientes solo piden lo publicado desde la última,
+ * con un día de margen por si algún correo llegó con retraso.
+ */
+function incrementalSince(lastSyncAt: Date | null) {
+  if (!lastSyncAt) return undefined;
+  return new Date(lastSyncAt.getTime() - 24 * 60 * 60 * 1000);
+}
+
+/**
+ * Sincroniza una cuenta: lee el buzón autorizado por su dueño, analiza los
+ * correos de la entidad bancaria y crea las transacciones detectadas.
  *
- * El proveedor es obligatorio:
- * - gmailEmailProvider -> Gmail real.
- * - mockEmailProvider -> únicamente pruebas.
+ * Garantías:
+ *  - Cada cuenta usa la autorización de su propio usuario.
+ *  - Solo se procesan correos que cumplen las reglas del banco.
+ *  - Nunca se registra dos veces el mismo correo (unique accountId+externalId).
+ *  - Cada transacción guarda la referencia al correo original.
  *
- * Este servicio NO utiliza mocks automáticamente.
+ * `provider` solo se inyecta en pruebas (p. ej. mockEmailProvider); en la
+ * app real se construye a partir de la credencial de la cuenta.
  */
 export async function syncAccount(
   userId: string,
   accountId: string,
-  provider: EmailProvider,
+  provider?: EmailProvider,
 ): Promise<SyncResult> {
-  console.log("==========================================");
-  console.log("[sync] SOLICITUD DE SINCRONIZACIÓN");
-  console.log("[sync] accountId:", accountId);
-  console.log("==========================================");
-
-  /*
-   * PASO 1
-   * Buscar la cuenta antes de tocar Gmail.
-   *
-   * Si falla aquí, el problema es Prisma/Supabase,
-   * no Gmail.
-   */
-  console.log("[sync] 1/7 Buscando cuenta en la base de datos...");
-
   const account = await db.account.findFirst({
-    where: {
-      id: accountId,
-      userId,
-    },
-    include: {
-      bank: true,
-    },
+    where: { id: accountId, userId },
+    include: { bank: true },
   });
 
   if (!account) {
-    console.warn("[sync] Cuenta no encontrada.");
-
-    return {
-      ok: false,
-      error: "Cuenta no encontrada.",
-      imported: 0,
-      skipped: 0,
-      filtered: 0,
-    };
+    return { ok: false, error: "Cuenta no encontrada.", ...EMPTY_COUNTS };
   }
 
-  console.log("[sync] Cuenta encontrada:", {
-    accountId: account.id,
-    email: account.email,
-    bank: account.bank.name,
-    parserKey: account.bank.parserKey,
-  });
+  let credentialId: string | null = null;
+
+  if (!provider) {
+    const credential = account.credentialId
+      ? await getCredentialById(account.credentialId)
+      : null;
+
+    if (!credential || credential.revokedAt) {
+      return {
+        ok: false,
+        error:
+          "Esta cuenta no tiene una autorización de Gmail válida. Vuelve a conectarla.",
+        needsReauth: true,
+        ...EMPTY_COUNTS,
+      };
+    }
+
+    credentialId = credential.id;
+    provider = createGmailProvider(credential);
+  }
 
   try {
-    const bank = ensureRequiredBankRules(account.bank);
-
-    if (rulesChanged(account.bank, bank)) {
-      console.log("[sync] Actualizando reglas mínimas del banco:", {
-        bank: bank.name,
-        senderAddresses: bank.senderAddresses,
-        senderDomains: bank.senderDomains,
-        subjectPatterns: bank.subjectPatterns,
-        keywords: bank.keywords,
-      });
-
+    // Una base sembrada con una versión anterior puede tener reglas
+    // incompletas; se completan y se guardan antes de filtrar nada.
+    const bank = withRequiredBankRules(account.bank);
+    if (bankRulesChanged(account.bank, bank)) {
       await db.bankEntity.update({
-        where: {
-          id: bank.id,
-        },
+        where: { id: bank.id },
         data: {
           senderAddresses: bank.senderAddresses,
           senderDomains: bank.senderDomains,
@@ -181,32 +92,9 @@ export async function syncAccount(
       });
     }
 
-    /*
-     * PASO 2
-     * Marcar la cuenta como sincronizando.
-     */
-    console.log("[sync] 2/7 Marcando cuenta como SYNCING...");
-
     await db.account.update({
-      where: {
-        id: account.id,
-      },
-      data: {
-        status: "SYNCING",
-      },
-    });
-
-    /*
-     * PASO 3
-     * Aquí empieza realmente Gmail.
-     */
-    console.log("[sync] 3/7 INVOCANDO PROVEEDOR DE CORREO");
-    console.log("🔥 Si estamos usando gmailEmailProvider, Gmail empieza aquí 🔥");
-
-    console.log("[sync] Reglas bancarias:", {
-      senderAddresses: bank.senderAddresses,
-      senderDomains: bank.senderDomains,
-      subjectPatterns: bank.subjectPatterns,
+      where: { id: account.id },
+      data: { status: "SYNCING" },
     });
 
     const emails = await provider.fetchEmails(account.email, {
@@ -214,86 +102,28 @@ export async function syncAccount(
       senderDomains: bank.senderDomains,
       subjectPatterns: bank.subjectPatterns,
       keywords: bank.keywords,
+      after: incrementalSince(account.lastSyncAt),
     });
 
-    console.log(
-      `[sync] ✅ Proveedor respondió con ${emails.length} correo(s).`,
-    );
-
-    /*
-     * PASO 4
-     * Obtener categorías disponibles.
-     */
-    console.log("[sync] 4/7 Cargando categorías...");
-
+    // Categorías del sistema para clasificar automáticamente
     const categories = await db.category.findMany({
-      where: {
-        isSystem: true,
-      },
-      select: {
-        id: true,
-        slug: true,
-      },
+      where: { isSystem: true },
+      select: { id: true, slug: true },
     });
-
-    const categoryBySlug = new Map(
-      categories.map((category) => [
-        category.slug,
-        category.id,
-      ]),
-    );
-
-    console.log(
-      `[sync] ${categories.length} categorías del sistema disponibles.`,
-    );
+    const categoryBySlug = new Map(categories.map((c) => [c.slug, c.id]));
 
     let imported = 0;
     let skipped = 0;
     let filtered = 0;
 
-    /*
-     * PASO 5
-     * Procesar los correos individualmente.
-     */
-    console.log("[sync] 5/7 Procesando mensajes...");
-
     for (const email of emails) {
-      console.log("------------------------------------------");
-
-      console.log("[sync] Correo:", {
-        externalId: email.externalId,
-        from: email.from,
-        subject: email.subject,
-        receivedAt: email.receivedAt,
-      });
-
-      /*
-       * 5.1 Validar que corresponda al banco.
-       */
-      const matchesRules = matchesBankRules(
-        email,
-        bank,
-      );
-
-      if (!matchesRules) {
-        console.warn(
-          "[sync] ❌ Correo rechazado por las reglas del banco.",
-          {
-            externalId: email.externalId,
-            from: email.from,
-            subject: email.subject,
-          },
-        );
-
+      // 1. Aplicar las reglas de identificación de la entidad bancaria
+      if (!matchesBankRules(email, bank)) {
         filtered++;
         continue;
       }
 
-      console.log("[sync] ✅ Coincide con las reglas del banco.");
-
-      /*
-       * 5.2 Evitar importar el mismo mensaje dos veces.
-       */
+      // 2. Evitar procesar dos veces el mismo correo
       const existing = await db.emailMessage.findUnique({
         where: {
           accountId_externalId: {
@@ -302,194 +132,75 @@ export async function syncAccount(
           },
         },
       });
-
       if (existing) {
-        console.log("[sync] ⏭️ Correo ya procesado:", {
-          externalId: email.externalId,
-        });
-
         skipped++;
         continue;
       }
 
-      /*
-       * 5.3 Interpretar el contenido bancario.
-       */
-      console.log(
-        `[sync] Ejecutando parser "${bank.parserKey}"...`,
-      );
-
-      const parsed = parseBankEmail(
-        email,
-        bank.parserKey,
-      );
-
+      // 3. Analizar el mensaje financiero
+      const parsed = parseBankEmail(email, bank.parserKey);
       if (!parsed) {
-        console.warn(
-          "[sync] ❌ El parser no pudo reconocer la transacción.",
-        );
-
-        console.warn("[sync] Información para depuración:", {
-          externalId: email.externalId,
-          from: email.from,
-          subject: email.subject,
-
-          // Solo mostramos una parte del contenido.
-          bodyPreview: email.snippet.slice(0, 500),
-        });
-
         filtered++;
         continue;
       }
 
-      console.log("[sync] ✅ TRANSACCIÓN DETECTADA:", {
-        externalId: email.externalId,
-        type: parsed.type,
-        amount: parsed.amount,
-        currency: parsed.currency,
-        merchant: parsed.merchant,
-        description: parsed.description,
-        date: parsed.date,
-      });
-
-      /*
-       * 5.4 Clasificación automática.
-       */
-      const categorySlug = inferCategorySlug(
-        parsed.merchant,
-        parsed.description,
-      );
-
-      const categoryId =
-        categoryBySlug.get(categorySlug) ?? null;
-
-      console.log("[sync] Categoría inferida:", {
-        categorySlug,
-        categoryFound: Boolean(categoryId),
-      });
-
-      /*
-       * 5.5 Guardar correo + transacción.
-       *
-       * Se hace dentro de una transacción Prisma:
-       * o se crean ambos o ninguno.
-       */
+      // 4. Crear la transacción con referencia al correo original
+      const categorySlug = inferCategorySlug(parsed.merchant, parsed.description);
       await db.$transaction(async (tx) => {
-        const storedEmail = await tx.emailMessage.create({
+        const stored = await tx.emailMessage.create({
           data: {
             accountId: account.id,
             externalId: email.externalId,
             fromAddress: email.from,
             subject: email.subject,
-            snippet: email.snippet,
+            snippet: email.snippet.slice(0, 2000),
             receivedAt: email.receivedAt,
           },
         });
-
         await tx.transaction.create({
           data: {
             userId,
             accountId: account.id,
-
             type: parsed.type,
             amount: parsed.amount,
             currency: parsed.currency,
-
             merchant: parsed.merchant,
-
             description: `Detectado desde correo de ${bank.name}`,
-
             date: parsed.date,
-
-            categoryId,
-
+            categoryId: categoryBySlug.get(categorySlug) ?? null,
             source: "EMAIL",
-
-            /*
-             * El ID original de Gmail nos sirve como
-             * referencia externa y protección adicional.
-             */
             externalRef: email.externalId,
-
-            /*
-             * Relación directa con el correo almacenado.
-             */
-            emailId: storedEmail.id,
+            emailId: stored.id,
           },
         });
       });
-
       imported++;
-
-      console.log("[sync] 💾 Transacción guardada correctamente.");
     }
 
-    /*
-     * PASO 6
-     * Actualizar estado.
-     */
-    console.log("[sync] 6/7 Actualizando estado de la cuenta...");
-
     await db.account.update({
-      where: {
-        id: account.id,
-      },
-      data: {
-        status: "CONNECTED",
-        lastSyncAt: new Date(),
-      },
+      where: { id: account.id },
+      data: { status: "CONNECTED", lastSyncAt: new Date() },
     });
 
-    /*
-     * PASO 7
-     * Resultado.
-     */
-    console.log("[sync] 7/7 SINCRONIZACIÓN TERMINADA");
-
-    console.log("[sync] Resultado:", {
-      imported,
-      skipped,
-      filtered,
-      totalEmails: emails.length,
-    });
-
-    console.log("==========================================");
-
-    return {
-      ok: true,
-      imported,
-      skipped,
-      filtered,
-    };
+    return { ok: true, imported, skipped, filtered };
   } catch (error) {
-    /*
-     * MUY IMPORTANTE:
-     *
-     * Si Prisma/Supabase está caído, intentar actualizar
-     * status aquí también puede fallar.
-     *
-     * Por eso ese segundo error se captura independientemente
-     * para no ocultar el error original.
-     */
-    console.error("==========================================");
-    console.error("[sync] ❌ ERROR DE SINCRONIZACIÓN");
-    console.error(error);
-    console.error("==========================================");
+    // Marcar el fallo no debe ocultar la causa: si la base también está
+    // caída, este update falla y el error original se perdería.
+    await db.account
+      .update({ where: { id: account.id }, data: { status: "ERROR" } })
+      .catch(() => {});
 
-    try {
-      await db.account.update({
-        where: {
-          id: account.id,
-        },
-        data: {
-          status: "ERROR",
-        },
-      });
-    } catch (statusError) {
-      console.error(
-        "[sync] No se pudo marcar la cuenta como ERROR:",
-        statusError,
-      );
+    if (error instanceof GmailAuthorizationError) {
+      if (credentialId) {
+        await markCredentialRevoked(credentialId).catch(() => {});
+      }
+      return {
+        ok: false,
+        error:
+          "Google rechazó la autorización de este buzón. Vuelve a conectar Gmail.",
+        needsReauth: true,
+        ...EMPTY_COUNTS,
+      };
     }
 
     throw error;

@@ -1,6 +1,11 @@
 import { google, type gmail_v1 } from "googleapis";
 
-import { createAuthorizedGmailOAuthClient } from "./gmail-oauth";
+import type { DecryptedCredential } from "./credentials";
+import {
+  GmailAuthorizationError,
+  createUserGmailClient,
+  isInvalidGrant,
+} from "./gmail-oauth";
 import type { EmailProvider, EmailQuery, InboxEmail } from "./provider";
 
 function unique(values: string[]) {
@@ -47,8 +52,14 @@ function buildSearchQuery(query: EmailQuery) {
   return terms.join(" ");
 }
 
-const DEFAULT_GMAIL_MAX_RESULTS = 9999;
-const GMAIL_MAX_RESULTS_LIMIT = 9999;
+/**
+ * Tope por sincronización. Bajo a propósito: en un despliegue serverless la
+ * petición muere a los 10-60 s y cada mensaje cuesta un users.messages.get.
+ * La primera sincronización trae el histórico reciente y las siguientes solo
+ * lo publicado desde lastSyncAt, así que este número no recorta el historial.
+ */
+const DEFAULT_GMAIL_MAX_RESULTS = 300;
+const GMAIL_MAX_RESULTS_LIMIT = 2000;
 
 /** Tope de correos a revisar por sincronización (GMAIL_MAX_RESULTS lo ajusta). */
 function getMaxResults() {
@@ -91,7 +102,6 @@ async function listMessageIds(
     }
 
     pageToken = response.data.nextPageToken ?? undefined;
-    console.log(`[gmail] ${ids.length} mensaje(s) listado(s)…`);
   } while (pageToken && ids.length < limit);
 
   return ids;
@@ -202,56 +212,50 @@ function messageToInboxEmail(
   };
 }
 
-export const gmailEmailProvider: EmailProvider = {
-  async fetchEmails(accountEmail: string, query: EmailQuery) {
-    console.log("🔥 GMAIL PROVIDER EJECUTADO 🔥");
-    console.log("[gmail] Inicializando OAuth...");
+/**
+ * Proveedor ligado a la autorización de un usuario concreto. No hay un
+ * singleton: cada cuenta lee su propio buzón con su propio token.
+ */
+export function createGmailProvider(
+  credential: DecryptedCredential,
+): EmailProvider {
+  return {
+    async fetchEmails(accountEmail: string, query: EmailQuery) {
+      const gmail = google.gmail({
+        version: "v1",
+        auth: createUserGmailClient(credential),
+      });
 
-    const gmail = google.gmail({
-      version: "v1",
-      auth: createAuthorizedGmailOAuthClient(),
-    });
+      try {
+        const profile = await gmail.users.getProfile({ userId: "me" });
+        const authorizedEmail = profile.data.emailAddress?.toLowerCase();
 
-    console.log("[gmail] Verificando cuenta autorizada...");
-    const profile = await gmail.users.getProfile({ userId: "me" });
-    const authorizedEmail = profile.data.emailAddress?.toLowerCase();
-    const requestedEmail = accountEmail.toLowerCase();
+        if (authorizedEmail && authorizedEmail !== accountEmail.toLowerCase()) {
+          throw new Error(
+            `La cuenta Gmail autorizada (${authorizedEmail}) no coincide con la cuenta conectada (${accountEmail}).`,
+          );
+        }
 
-    console.log("[gmail] Cuenta autorizada:", {
-      authorizedEmail,
-      requestedEmail,
-    });
+        const searchQuery = buildSearchQuery(query);
+        const messageIds = await listMessageIds(
+          gmail,
+          searchQuery,
+          getMaxResults(),
+        );
+        const fullMessages = await fetchMessages(gmail, messageIds);
 
-    if (authorizedEmail && authorizedEmail !== requestedEmail) {
-      throw new Error(
-        `La cuenta Gmail autorizada (${authorizedEmail}) no coincide con la cuenta conectada (${requestedEmail}).`,
-      );
-    }
-
-    const searchQuery = buildSearchQuery(query);
-    console.log("[gmail] Query:", searchQuery);
-    console.log("[gmail] Buscando mensajes...");
-
-    const maxResults = getMaxResults();
-    console.log("[gmail] Tope de mensajes:", maxResults);
-    const messageIds = await listMessageIds(gmail, searchQuery, maxResults);
-    console.log(`[gmail] ${messageIds.length} mensaje(s) candidato(s).`);
-
-    if (messageIds.length === maxResults) {
-      console.warn(
-        `[gmail] Se alcanzó el tope de ${maxResults} correos; sube GMAIL_MAX_RESULTS si faltan.`,
-      );
-    }
-
-    const fullMessages = await fetchMessages(gmail, messageIds);
-
-    const emails = fullMessages
-      .map((message) => messageToInboxEmail(message))
-      .filter((email): email is InboxEmail => Boolean(email));
-
-    console.log(`[gmail] ${emails.length} mensaje(s) normalizado(s).`);
-    return emails;
-  },
-};
-
-export default gmailEmailProvider;
+        return fullMessages
+          .map((message) => messageToInboxEmail(message))
+          .filter((email): email is InboxEmail => Boolean(email));
+      } catch (error) {
+        if (isInvalidGrant(error)) {
+          throw new GmailAuthorizationError(
+            "La autorización de Gmail ya no es válida.",
+            error,
+          );
+        }
+        throw error;
+      }
+    },
+  };
+}

@@ -10,6 +10,8 @@ export interface AccountDTO {
   lastSyncAt: Date | null;
   bank: { id: string; name: string; slug: string; color: string | null };
   transactionCount: number;
+  /** Hay una autorización de Gmail vigente para leer este buzón. */
+  authorized: boolean;
 }
 
 export async function listAccounts(userId: string): Promise<AccountDTO[]> {
@@ -18,6 +20,7 @@ export async function listAccounts(userId: string): Promise<AccountDTO[]> {
     orderBy: { connectedAt: "asc" },
     include: {
       bank: { select: { id: true, name: true, slug: true, color: true } },
+      credential: { select: { revokedAt: true } },
       _count: { select: { transactions: true } },
     },
   });
@@ -30,6 +33,7 @@ export async function listAccounts(userId: string): Promise<AccountDTO[]> {
     lastSyncAt: a.lastSyncAt,
     bank: a.bank,
     transactionCount: a._count.transactions,
+    authorized: Boolean(a.credential && !a.credential.revokedAt),
   }));
 }
 
