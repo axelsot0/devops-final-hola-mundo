@@ -21,6 +21,7 @@ export interface EmailQuery {
   senderAddresses: string[];
   senderDomains: string[];
   subjectPatterns: string[];
+  keywords?: string[];
   /** Solo mensajes posteriores a esta fecha */
   after?: Date;
 }
