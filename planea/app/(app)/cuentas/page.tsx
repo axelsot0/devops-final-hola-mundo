@@ -11,6 +11,12 @@ import { ConnectGmailDialog } from "./connect-gmail-dialog";
 
 export const metadata: Metadata = { title: "Cuentas conectadas · Planea" };
 
+/**
+ * La sincronización se ejecuta en esta ruta (server action) y habla con la
+ * API de Gmail: el límite por defecto de 10 s en Vercel la cortaría a mitad.
+ */
+export const maxDuration = 60;
+
 const OK_TONE = "border-emerald-200 bg-emerald-50 text-emerald-900";
 const WARN_TONE = "border-amber-200 bg-amber-50 text-amber-900";
 const ERROR_TONE = "border-destructive/30 bg-destructive/10 text-destructive";
