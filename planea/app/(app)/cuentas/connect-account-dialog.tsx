@@ -101,9 +101,8 @@ export function ConnectAccountDialog({ banks }: { banks: BankDTO[] }) {
             <FieldError state={state} name="nickname" />
           </FormRow>
           <p className="rounded-lg bg-accent px-3 py-2 text-xs text-accent-foreground">
-            Modo demostración: la bandeja de correo se simula con mensajes de
-            ejemplo. En producción se conectaría con la Gmail API mediante
-            OAuth 2.0.
+            Para sincronizar correos reales, autoriza Gmail desde la pantalla de
+            cuentas y luego pulsa sincronizar.
           </p>
           <SubmitButton className="w-full">Conectar cuenta</SubmitButton>
         </form>
