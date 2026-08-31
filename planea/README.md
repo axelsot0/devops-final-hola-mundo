@@ -133,10 +133,17 @@ analiza, extrae tipo de movimiento, monto, fecha, comercio, descripción y
 moneda, clasifica la transacción y guarda una referencia al correo original.
 Nunca registra dos veces el mismo mensaje.
 
-En desarrollo la bandeja se simula (`modules/email-sync/mock-inbox.ts`) para no
-depender de credenciales ni de datos reales. La integración real con la Gmail
-API vía OAuth 2.0 se conecta implementando la interfaz `EmailProvider` de
-`modules/email-sync/provider.ts`; el resto del flujo no cambia.
+La sincronización desde la pantalla de cuentas usa Gmail real vía OAuth 2.0
+(`modules/email-sync/gmail-provider.ts`). Configura `GOOGLE_CLIENT_ID` y
+`GOOGLE_CLIENT_SECRET` en `.env`, asegúrate de que el OAuth Client permita
+`http://localhost:3000/oauth2callback` como redirect URI, y luego usa el botón
+**Autorizar Gmail** en `/cuentas`. El callback local guardará
+`GOOGLE_REFRESH_TOKEN` en `.env`; después pulsa **Sincronizar** en la cuenta.
+Opcionalmente puedes ajustar `GOOGLE_REDIRECT_URI` y `GMAIL_MAX_RESULTS`
+(por defecto 9999, máximo 9999). La sincronización reconoce consumos e ingresos
+como depósitos, transferencias recibidas, pagos recibidos y nómina. El mock
+(`modules/email-sync/mock-inbox.ts`) queda disponible como implementación
+inyectable de `EmailProvider` para pruebas o desarrollo aislado.
 
 ### Conectar Gmail de verdad
 
