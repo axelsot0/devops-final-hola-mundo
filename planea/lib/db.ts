@@ -44,19 +44,21 @@ function withConnectionDefaults(url: string | undefined) {
  * o con el nombre pegado delante. Solo se registra el esquema y la longitud;
  * la contraseña viaja en la parte que no se imprime.
  */
-function assertDatabaseUrl(url: string | undefined) {
-  if (url && /^postgres(ql)?:\/\//.test(url)) return;
-
-  console.error("[db] DATABASE_URL inválida o ausente:", {
-    presente: Boolean(url),
-    longitud: url?.length ?? 0,
-    empiezaPor: url ? JSON.stringify(url.slice(0, 12)) : null,
-  });
-}
-
-assertDatabaseUrl(process.env.DATABASE_URL);
-
 const datasourceUrl = withConnectionDefaults(process.env.DATABASE_URL);
+
+/*
+ * Se registra siempre, no solo al fallar: la ausencia de un log no distingue
+ * "todo bien" de "esta línea nunca se ejecutó", y necesitábamos esa
+ * diferencia para localizar el fallo. Nunca imprime la contraseña.
+ */
+console.log("[db] configuración de la conexión:", {
+  entornoRecibido: Boolean(process.env.DATABASE_URL),
+  longitudEntorno: process.env.DATABASE_URL?.length ?? 0,
+  esquemaEntorno: JSON.stringify(process.env.DATABASE_URL?.slice(0, 12) ?? null),
+  urlPasadaAPrisma: Boolean(datasourceUrl),
+  esquemaPasado: JSON.stringify(datasourceUrl?.slice(0, 12) ?? null),
+  serverless: isServerless,
+});
 
 export const db =
   globalForPrisma.prisma ??
