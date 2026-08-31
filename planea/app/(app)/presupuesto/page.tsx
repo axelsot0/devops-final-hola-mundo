@@ -6,11 +6,16 @@ import {
   listRecurringPayments,
   monthlyEquivalent,
 } from "@/modules/recurring-payments/service";
+import {
+  getMonthlyIncomeTotal,
+  listRecurringIncomes,
+} from "@/modules/recurring-incomes/service";
 import { listCategories } from "@/modules/categories/service";
 import { listAccounts } from "@/modules/accounts/service";
 import { PageHeader } from "@/components/shared/page-header";
 import { BudgetCard } from "./budget-card";
 import { RecurringSection } from "./recurring-section";
+import { IncomesSection } from "./incomes-section";
 
 export const metadata: Metadata = { title: "Presupuesto · Planea" };
 
@@ -25,6 +30,8 @@ export default async function BudgetPage() {
         : sum,
     0,
   );
+  const incomes = await listRecurringIncomes(user.id);
+  const incomeTotal = await getMonthlyIncomeTotal(user.id);
   const [categories, accounts] = await Promise.all([
     listCategories(user.id),
     listAccounts(user.id),
@@ -43,6 +50,12 @@ export default async function BudgetPage() {
           categories={categories}
           accounts={accounts}
           monthlyTotal={monthlyTotal}
+        />
+        <IncomesSection
+          incomes={incomes}
+          categories={categories}
+          accounts={accounts}
+          monthlyTotal={incomeTotal}
         />
       </div>
     </>

@@ -28,6 +28,7 @@ model User {
   transactions      Transaction[]
   categories        Category[]
   recurringPayments RecurringPayment[]
+  recurringIncomes  RecurringIncome[]
   budgets           Budget[]
   goals             SavingsGoal[]
   memberships       GroupMember[]
@@ -131,8 +132,9 @@ model Account {
   balance      Decimal?         @db.Decimal(14, 2)
   balanceAt    DateTime?
 
-  transactions Transaction[]
-  emails       EmailMessage[]
+  transactions     Transaction[]
+  emails           EmailMessage[]
+  recurringIncomes RecurringIncome[]
 
   @@unique([userId, email, bankId])
 }
@@ -166,6 +168,8 @@ enum TransactionType {
 enum TransactionSource {
   EMAIL
   MANUAL
+  // Anotado por la app a partir de un ingreso recurrente del usuario.
+  RECURRING
 }
 
 model Category {
@@ -180,6 +184,7 @@ model Category {
 
   transactions      Transaction[]
   recurringPayments RecurringPayment[]
+  recurringIncomes  RecurringIncome[]
 
   @@unique([userId, slug])
 }
@@ -262,6 +267,43 @@ model Budget {
   updatedAt         DateTime @updatedAt
 
   @@unique([userId, year, month])
+}
+
+// Ingresos que se repiten cada mes en días conocidos: sueldo, quincena,
+// alquiler que se cobra. Existen porque no todo ingreso llega por un correo
+// que sepamos leer, y sin ellos el balance del panel se queda corto.
+model RecurringIncome {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  amount      Decimal         @db.Decimal(14, 2)
+  currency    String          @default("DOP")
+  accountId   String?
+  account     Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  categoryId  String?
+  category    Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  // Días del mes en que cae. Una quincena es [15, 30]; si el mes no llega a
+  // ese día (febrero y el 30), se anota el último día del mes.
+  daysOfMonth Int[]
+  status      RecurringStatus @default(ACTIVE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  postings RecurringIncomePosting[]
+}
+
+// Cada anotación ya hecha. La clave única es lo que impide que abrir la app
+// dos veces el mismo día registre el sueldo dos veces.
+model RecurringIncomePosting {
+  id            String          @id @default(cuid())
+  incomeId      String
+  income        RecurringIncome @relation(fields: [incomeId], references: [id], onDelete: Cascade)
+  postedFor     DateTime
+  transactionId String?
+  createdAt     DateTime        @default(now())
+
+  @@unique([incomeId, postedFor])
 }
 
 // ─────────────────────────────────────────────

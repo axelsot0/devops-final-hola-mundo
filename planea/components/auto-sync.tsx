@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { syncAllAccountsAction } from "@/modules/email-sync/actions";
+import { postRecurringIncomesAction } from "@/modules/recurring-incomes/actions";
 
 /**
  * Sincroniza las cuentas al entrar en la app, una sola vez por sesión del
@@ -31,6 +32,24 @@ export function AutoSync() {
       // Navegación privada o almacenamiento bloqueado: seguimos adelante,
       // el margen del servidor evita sincronizar de más.
     }
+
+    /*
+     * Los ingresos recurrentes se anotan primero y sin depender de Gmail:
+     * son los que el usuario ya declaró, y deben aparecer aunque la
+     * sincronización de correo falle o no haya ninguna cuenta conectada.
+     */
+    postRecurringIncomesAction()
+      .then((result) => {
+        if (cancelled || !result.ok || result.posted === 0) return;
+
+        toast.success(
+          result.posted === 1
+            ? "Se anotó 1 ingreso recurrente"
+            : `Se anotaron ${result.posted} ingresos recurrentes`,
+        );
+        router.refresh();
+      })
+      .catch(() => {});
 
     syncAllAccountsAction()
       .then((result) => {
