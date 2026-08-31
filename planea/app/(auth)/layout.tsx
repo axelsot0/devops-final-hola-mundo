@@ -20,6 +20,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           Tus finanzas personales y grupales, en un solo lugar.{" "}
           <Link href="/privacidad" className="hover:underline">
             Política de privacidad
+          </Link>{" "}
+          ·{" "}
+          <Link href="/terminos" className="hover:underline">
+            Condiciones del servicio
           </Link>
         </p>
       </div>
