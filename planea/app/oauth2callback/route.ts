@@ -1,85 +1,114 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-
+import { google } from "googleapis";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { saveGmailCredential } from "@/modules/email-sync/credentials";
 import { createGmailOAuthClient } from "@/modules/email-sync/gmail-oauth";
+import {
+  OAUTH_STATE_COOKIE,
+  parseOAuthStateCookie,
+} from "@/modules/email-sync/oauth-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function localOAuthEnabled() {
-  return (
-    process.env.NODE_ENV === "development" ||
-    process.env.ENABLE_LOCAL_GMAIL_OAUTH === "true"
+function backToAccounts(request: NextRequest, status: string) {
+  const response = NextResponse.redirect(
+    new URL(`/cuentas?gmail=${status}`, request.url),
   );
+  response.cookies.delete(OAUTH_STATE_COOKIE);
+  return response;
 }
 
-function escapeEnvValue(value: string) {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/\r?\n/g, "\\n")
-    .replace(/"/g, '\\"')
-    .replace(/\$/g, "\\$");
-}
-
-async function upsertEnvValue(name: string, value: string) {
-  const envPath = path.join(process.cwd(), ".env");
-  let current = "";
-
-  try {
-    current = await fs.readFile(envPath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-
-  const escaped = `${name}="${escapeEnvValue(value)}"`;
-  const pattern = new RegExp(`^${name}=.*$`, "m");
-  const next = pattern.test(current)
-    ? current.replace(pattern, escaped)
-    : `${current.trimEnd()}\n${escaped}\n`;
-
-  await fs.writeFile(envPath, next, "utf8");
-  process.env[name] = value;
-}
-
-function redirectToAccounts(request: NextRequest, status: string) {
-  return NextResponse.redirect(new URL(`/cuentas?gmail=${status}`, request.url));
-}
-
+/**
+ * Vuelta del consentimiento de Google: canjea el código, guarda el refresh
+ * token cifrado del usuario y deja la cuenta lista para sincronizar. El
+ * correo no se pide en un formulario: lo dice el propio buzón autorizado.
+ */
 export async function GET(request: NextRequest) {
-  if (!localOAuthEnabled()) {
-    return NextResponse.json({ error: "OAuth local deshabilitado." }, { status: 404 });
-  }
-
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const state = request.nextUrl.searchParams.get("state");
-  const expectedState = request.cookies.get("gmail_oauth_state")?.value;
+  if (request.nextUrl.searchParams.get("error")) {
+    return backToAccounts(request, "denied");
+  }
 
-  if (!state || !expectedState || state !== expectedState) {
-    return redirectToAccounts(request, "state-error");
+  const stored = parseOAuthStateCookie(
+    request.cookies.get(OAUTH_STATE_COOKIE)?.value,
+  );
+  const state = request.nextUrl.searchParams.get("state");
+
+  if (!stored || !state || state !== stored.state) {
+    return backToAccounts(request, "state-error");
   }
 
   const code = request.nextUrl.searchParams.get("code");
   if (!code) {
-    return redirectToAccounts(request, "missing-code");
+    return backToAccounts(request, "missing-code");
+  }
+
+  const bank = await db.bankEntity.findFirst({
+    where: { id: stored.bankId, active: true },
+    select: { id: true },
+  });
+  if (!bank) {
+    return backToAccounts(request, "missing-bank");
   }
 
   const oauthClient = createGmailOAuthClient(request.nextUrl.origin);
   const { tokens } = await oauthClient.getToken(code);
 
+  // Google solo entrega refresh token la primera vez que se aprueba la app;
+  // pedimos prompt=consent justo para que siempre llegue uno.
   if (!tokens.refresh_token) {
-    return redirectToAccounts(request, "missing-refresh-token");
+    return backToAccounts(request, "missing-refresh-token");
   }
 
-  await upsertEnvValue("GOOGLE_REFRESH_TOKEN", tokens.refresh_token);
+  oauthClient.setCredentials(tokens);
+  const profile = await google
+    .gmail({ version: "v1", auth: oauthClient })
+    .users.getProfile({ userId: "me" });
 
-  const response = redirectToAccounts(request, "authorized");
-  response.cookies.delete("gmail_oauth_state");
-  return response;
+  const email = profile.data.emailAddress?.toLowerCase();
+  if (!email) {
+    return backToAccounts(request, "missing-email");
+  }
+
+  const credential = await saveGmailCredential({
+    userId: session.user.id,
+    email,
+    refreshToken: tokens.refresh_token,
+    accessToken: tokens.access_token ?? null,
+    accessTokenExpiresAt: tokens.expiry_date
+      ? new Date(tokens.expiry_date)
+      : null,
+    scope: tokens.scope ?? null,
+  });
+
+  // Reautorizar un buzón ya conectado repara la cuenta existente en vez de
+  // duplicarla.
+  await db.account.upsert({
+    where: {
+      userId_email_bankId: {
+        userId: session.user.id,
+        email,
+        bankId: bank.id,
+      },
+    },
+    create: {
+      userId: session.user.id,
+      email,
+      bankId: bank.id,
+      credentialId: credential.id,
+    },
+    update: {
+      credentialId: credential.id,
+      status: "CONNECTED",
+    },
+  });
+
+  return backToAccounts(request, "connected");
 }

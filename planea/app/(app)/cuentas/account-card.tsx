@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Landmark, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Landmark, Loader2, MailWarning, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { deleteAccountAction, updateAccountAction } from "@/modules/accounts/actions";
@@ -48,6 +49,9 @@ export function AccountCard({ account }: { account: AccountDTO }) {
   }
 
   const status = STATUS_LABEL[account.status];
+  // Sin autorización vigente sincronizar solo daría un error: la tarjeta
+  // ofrece rehacer el permiso en su lugar.
+  const reconnectHref = `/api/gmail/oauth/start?bankId=${account.bank.id}`;
 
   return (
     <Card className="flex flex-col gap-4 p-5">
@@ -83,20 +87,36 @@ export function AccountCard({ account }: { account: AccountDTO }) {
         </p>
       </div>
 
+      {!account.authorized && (
+        <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <MailWarning className="mt-0.5 size-4 shrink-0" />
+          Falta autorizar este buzón en Google para poder leer los correos.
+        </p>
+      )}
+
       <div className="mt-auto flex items-center gap-2">
-        <Button
-          size="sm"
-          onClick={handleSync}
-          disabled={syncing}
-          className="flex-1"
-        >
-          {syncing ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="size-4" />
-          )}
-          {syncing ? "Sincronizando…" : "Sincronizar"}
-        </Button>
+        {account.authorized ? (
+          <Button
+            size="sm"
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex-1"
+          >
+            {syncing ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+            {syncing ? "Sincronizando…" : "Sincronizar"}
+          </Button>
+        ) : (
+          <Button size="sm" asChild className="flex-1">
+            <Link href={reconnectHref}>
+              <MailWarning className="size-4" />
+              Conectar Gmail
+            </Link>
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"
