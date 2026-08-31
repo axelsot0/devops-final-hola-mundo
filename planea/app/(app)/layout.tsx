@@ -1,7 +1,14 @@
 import { requireUser } from "@/lib/auth-helpers";
+import { AutoSync } from "@/components/auto-sync";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { MobileHeader } from "@/components/layout/mobile-header";
 import { Sidebar } from "@/components/layout/sidebar";
+
+/**
+ * La sincronización automática habla con la Gmail API desde la ruta que el
+ * usuario tenga abierta, y el límite por defecto de 10 s la cortaría.
+ */
+export const maxDuration = 60;
 
 export default async function AppLayout({
   children,
@@ -12,6 +19,7 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-dvh">
+      <AutoSync />
       <Sidebar user={user} />
       <MobileHeader user={user} />
       <main className="md:pl-64">
