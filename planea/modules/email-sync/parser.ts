@@ -31,7 +31,7 @@ const INCOME_KEYWORDS = [
 ];
 const EXPENSE_KEYWORDS = ["consumo", "compra", "retiro", "débito", "debito", "pago realizado", "cargo"];
 
-const AMOUNT_REGEX = /(?:RD\$|DOP\s?|US\$|USD\s?)\s?([\d.,]+)/i;
+const AMOUNT_REGEX = /(?:RD\s?\$|DOP\s?|US\s?\$|USD\s?)\s?([\d.,]+)/i;
 const MERCHANT_REGEX = /(?:en|comercio)\s+([A-Za-zÁÉÍÓÚÑáéíóúñ0-9'.& ]+?)\s+(?:con|el|por|mediante|\.)/i;
 
 /*
@@ -66,6 +66,22 @@ const POPULAR_FLAT_REGEX = new RegExp(
     String.raw`(\d{1,2}\/\d{1,2}\/\d{4})\s+` +
     String.raw`([\s\S]*?)` +
     String.raw`\s+(?:${STATUS_WORDS})\b`,
+  "i",
+);
+
+/*
+ * Transferencias recibidas de Popular: otra tabla distinta a la de consumo.
+ *
+ *   Monto \tFecha \tCanal
+ *   RD $576.00 \t27/8/2026 \nAPP POPULAR
+ *
+ * Aquí el importe lleva un espacio tras "RD", que es justo lo que hacía que
+ * el reconocimiento genérico fallara y estos ingresos no se registraran.
+ */
+const POPULAR_TRANSFER_REGEX = new RegExp(
+  String.raw`Monto\s+Fecha\s+Canal\s+` +
+    String.raw`(RD\s?\$|US\s?\$|DOP|USD)\s?([\d.,]+)\s+` +
+    String.raw`(\d{1,2}\/\d{1,2}\/\d{4})`,
   "i",
 );
 
@@ -275,6 +291,22 @@ export function parseBankEmail(
       description: email.subject,
       date: row.date ?? email.receivedAt,
     };
+  }
+
+  // Transferencia recibida: su propia tabla, con la fecha en la fila.
+  const transfer = POPULAR_TRANSFER_REGEX.exec(text);
+  if (transfer) {
+    const amount = toAmount(transfer[2]!);
+    if (amount !== null) {
+      return {
+        type: isExpense && !isIncome ? "EXPENSE" : "INCOME",
+        amount,
+        currency: toCurrency(transfer[1]!, ""),
+        merchant: inferIncomeMerchant(text, null),
+        description: email.subject,
+        date: parseTableDate(transfer[3]!) ?? email.receivedAt,
+      };
+    }
   }
 
   const amountMatch = AMOUNT_REGEX.exec(text);
