@@ -37,6 +37,25 @@ function withConnectionDefaults(url: string | undefined) {
   }
 }
 
+/**
+ * Prisma da el mismo error —"the URL must start with the protocol
+ * postgresql://"— cuando el valor está mal escrito y cuando no llega ninguno,
+ * así que sin esto no se distingue una variable ausente de una con comillas
+ * o con el nombre pegado delante. Solo se registra el esquema y la longitud;
+ * la contraseña viaja en la parte que no se imprime.
+ */
+function assertDatabaseUrl(url: string | undefined) {
+  if (url && /^postgres(ql)?:\/\//.test(url)) return;
+
+  console.error("[db] DATABASE_URL inválida o ausente:", {
+    presente: Boolean(url),
+    longitud: url?.length ?? 0,
+    empiezaPor: url ? JSON.stringify(url.slice(0, 12)) : null,
+  });
+}
+
+assertDatabaseUrl(process.env.DATABASE_URL);
+
 const datasourceUrl = withConnectionDefaults(process.env.DATABASE_URL);
 
 export const db =
