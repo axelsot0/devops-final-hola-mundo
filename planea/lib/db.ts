@@ -46,4 +46,13 @@ export const db =
     datasourceUrl,
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+/**
+ * El cliente se guarda en globalThis también en producción, no solo para
+ * sobrevivir al hot reload.
+ *
+ * El empaquetado divide este módulo entre el chunk de SSR y el de los Server
+ * Components, y cada copia instanciaría su propio PrismaClient —es decir, su
+ * propio pool— dentro del mismo proceso. Compartirlo por globalThis deja una
+ * sola conexión por instancia, que es lo que el pooler cuenta.
+ */
+globalForPrisma.prisma = db;
