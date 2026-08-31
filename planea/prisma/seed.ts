@@ -17,6 +17,7 @@ import {
 } from "../lib/generated/prisma";
 import bcrypt from "bcryptjs";
 import { SYSTEM_CATEGORIES } from "../lib/system-categories";
+import { BANK_EMAIL_RULES } from "../modules/email-sync/bank-rules";
 import { allocatePlan } from "../modules/group-plans/allocation";
 
 const db = new PrismaClient();
@@ -35,91 +36,16 @@ function pick<T>(arr: T[]): T {
 }
 
 const BANKS = [
-  {
-    name: "Banco Popular",
-    slug: "banco-popular",
-    color: "#005baa",
-    senderAddresses: [
-      "notificaciones@popularenlinea.com",
-      "notificaciones@popularenlinea.com.do",
-    ],
-    senderDomains: ["popularenlinea.com", "popularenlinea.com.do", "bpd.com.do"],
-    subjectPatterns: [
-      "Notificación de Consumo",
-      "Notificación de transacción",
-      "Notificación de Transacción",
-      "Notificación de Depósito",
-      "Notificación de Deposito",
-      "Notificación de Crédito",
-      "Notificación de Credito",
-      "Aviso de consumo",
-      "Depósito recibido",
-      "Deposito recibido",
-      "Transferencia recibida",
-      "Pago recibido",
-      "Crédito recibido",
-      "Credito recibido",
-    ],
-    keywords: [
-      "consumo",
-      "tarjeta",
-      "monto",
-      "RD$",
-      "depósito",
-      "deposito",
-      "acreditó",
-      "acredito",
-      "crédito",
-      "credito",
-      "transferencia recibida",
-      "pago recibido",
-      "nómina",
-      "nomina",
-      "salario",
-    ],
-    parserKey: "generic-es",
-  },
-  {
-    name: "Banreservas",
-    slug: "banreservas",
-    color: "#00529c",
-    senderAddresses: ["alertas@banreservas.com"],
-    senderDomains: ["banreservas.com"],
-    subjectPatterns: ["Alerta de transacción", "Notificación Banreservas"],
-    keywords: ["transacción", "monto", "cuenta"],
-    parserKey: "generic-es",
-  },
-  {
-    name: "Banco BHD",
-    slug: "banco-bhd",
-    color: "#00713d",
-    senderAddresses: ["avisos@bhd.com.do"],
-    senderDomains: ["bhd.com.do"],
-    subjectPatterns: ["Aviso de transacción BHD"],
-    keywords: ["consumo", "retiro", "depósito"],
-    parserKey: "generic-es",
-  },
-  {
-    name: "Scotiabank RD",
-    slug: "scotiabank-rd",
-    color: "#ec111a",
-    senderAddresses: ["alertas@scotiabank.com.do"],
-    senderDomains: ["scotiabank.com.do"],
-    subjectPatterns: ["ScotiaAlertas"],
-    keywords: ["compra", "monto"],
-    parserKey: "generic-es",
-  },
-  {
-    name: "APAP",
-    slug: "apap",
-    color: "#f26522",
-    senderAddresses: ["notificaciones@apap.com.do"],
-    senderDomains: ["apap.com.do"],
-    subjectPatterns: ["Notificación de movimiento"],
-    keywords: ["movimiento", "monto"],
-    parserKey: "generic-es",
-  },
-];
+  { name: "Banco Popular", slug: "banco-popular", color: "#005baa" },
+  { name: "Banreservas", slug: "banreservas", color: "#00529c" },
+  { name: "Banco BHD", slug: "banco-bhd", color: "#00713d" },
+  { name: "Scotiabank RD", slug: "scotiabank-rd", color: "#ec111a" },
+  { name: "APAP", slug: "apap", color: "#f26522" },
+].map((bank) => ({
+  ...bank,
+  ...BANK_EMAIL_RULES[bank.slug]!,
+  parserKey: "generic-es",
+}));
 
 const CATEGORIES = SYSTEM_CATEGORIES;
 
