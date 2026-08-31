@@ -7,6 +7,8 @@ export interface ParsedTransaction {
   merchant: string | null;
   description: string;
   date: Date;
+  /** Saldo de la cuenta si el correo lo informa (Qik lo trae, Popular no). */
+  balance?: number | null;
 }
 
 const INCOME_KEYWORDS = [
@@ -166,6 +168,9 @@ const QIK_TOKE =
 
 /** Filas de la tabla, como respaldo si cambia la redacción de la frase. */
 const QIK_TABLE_AMOUNT = /Monto\s*[:\t]?\s*(RD\$|US\$|DOP|USD)\s*([\d.,]+)/i;
+/** Qik informa el saldo tras el movimiento; Popular no lo incluye nunca. */
+const QIK_BALANCE =
+  /Balance\s+Disponible\s*[:\t]?\s*(?:RD\s?\$|US\s?\$|DOP|USD)\s*([\d.,]+)/i;
 const QIK_TABLE_PLACE =
   /(?:Localidad|Lugar)\s*[:\t]?\s*([^\n\t]{1,80}?)\s*(?:\n|\t|Fecha|Monto|Estatus|Balance|$)/i;
 
@@ -219,6 +224,7 @@ function qikDate(text: string): Date | null {
 function parseQikEmail(email: InboxEmail): ParsedTransaction | null {
   const text = `${email.subject}. ${email.snippet}`;
   const date = qikDate(text) ?? email.receivedAt;
+  const balance = toAmount(QIK_BALANCE.exec(text)?.[1] ?? "");
 
   // Toke recibido: ingreso, y el comercio es quien envía el dinero.
   const toke = QIK_TOKE.exec(text);
@@ -233,6 +239,7 @@ function parseQikEmail(email: InboxEmail): ParsedTransaction | null {
       merchant: normalizeMerchant(toke[3]!) ?? "Toke recibido",
       description: email.subject,
       date,
+      balance,
     };
   }
 
@@ -260,6 +267,7 @@ function parseQikEmail(email: InboxEmail): ParsedTransaction | null {
     merchant: isReversal && place ? `Reverso · ${place}` : place,
     description: email.subject,
     date,
+    balance,
   };
 }
 

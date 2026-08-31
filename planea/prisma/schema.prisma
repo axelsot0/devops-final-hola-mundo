@@ -126,6 +126,10 @@ model Account {
   credential   EmailCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
   connectedAt  DateTime         @default(now())
   lastSyncAt   DateTime?
+  // Saldo informado por el propio banco en su último correo. Solo algunos lo
+  // incluyen (Qik sí, Popular no), así que puede quedarse en null para siempre.
+  balance      Decimal?         @db.Decimal(14, 2)
+  balanceAt    DateTime?
 
   transactions Transaction[]
   emails       EmailMessage[]
@@ -195,6 +199,10 @@ model Transaction {
   categoryId  String?
   category    Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   source      TransactionSource @default(MANUAL)
+  // Movimiento entre cuentas propias (p. ej. un Toke que te envías tú mismo).
+  // Se registra, pero no cuenta como ingreso ni como gasto: el dinero no
+  // entra ni sale de tu patrimonio, solo cambia de sitio.
+  isInternal  Boolean           @default(false)
   externalRef String?
   emailId     String?           @unique
   email       EmailMessage?     @relation(fields: [emailId], references: [id], onDelete: SetNull)

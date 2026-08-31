@@ -5,6 +5,7 @@ import { getCredentialById, markCredentialRevoked } from "./credentials";
 import { createGmailProvider } from "./gmail-provider";
 import { GmailAuthorizationError } from "./gmail-oauth";
 import { matchesBankRules, parseBankEmail } from "./parser";
+import { isSamePerson } from "./self-transfer";
 import type { EmailProvider } from "./provider";
 
 export interface SyncResult {
@@ -46,10 +47,13 @@ export async function syncAccount(
   accountId: string,
   provider?: EmailProvider,
 ): Promise<SyncResult> {
-  const account = await db.account.findFirst({
-    where: { id: accountId, userId },
-    include: { bank: true },
-  });
+  const [account, user] = await Promise.all([
+    db.account.findFirst({
+      where: { id: accountId, userId },
+      include: { bank: true },
+    }),
+    db.user.findUnique({ where: { id: userId }, select: { name: true } }),
+  ]);
 
   if (!account) {
     return { ok: false, error: "Cuenta no encontrada.", ...EMPTY_COUNTS };
@@ -116,6 +120,13 @@ export async function syncAccount(
     let skipped = 0;
     let filtered = 0;
 
+    /*
+     * Algunos bancos informan el saldo tras cada movimiento (Qik lo hace,
+     * Popular no). Nos quedamos con el del correo más reciente: es un saldo
+     * real del banco, no la suma de lo que hemos logrado detectar.
+     */
+    let latestBalance: { amount: number; at: Date } | null = null;
+
     for (const email of emails) {
       // 1. Aplicar las reglas de identificación de la entidad bancaria
       if (!matchesBankRules(email, bank)) {
@@ -144,6 +155,21 @@ export async function syncAccount(
         continue;
       }
 
+      if (
+        parsed.balance != null &&
+        (!latestBalance || email.receivedAt > latestBalance.at)
+      ) {
+        latestBalance = { amount: parsed.balance, at: email.receivedAt };
+      }
+
+      /*
+       * Un ingreso a nombre del propio titular es un traspaso entre cuentas
+       * suyas, no dinero nuevo. Se guarda igual —el movimiento existió— pero
+       * marcado para que no cuente como ingreso.
+       */
+      const isInternal =
+        parsed.type === "INCOME" && isSamePerson(parsed.merchant, user?.name ?? null);
+
       // 4. Crear la transacción con referencia al correo original
       const categorySlug = inferCategorySlug(parsed.merchant, parsed.description);
       await db.$transaction(async (tx) => {
@@ -169,6 +195,7 @@ export async function syncAccount(
             date: parsed.date,
             categoryId: categoryBySlug.get(categorySlug) ?? null,
             source: "EMAIL",
+            isInternal,
             externalRef: email.externalId,
             emailId: stored.id,
           },
@@ -177,9 +204,20 @@ export async function syncAccount(
       imported++;
     }
 
+    // Un correo viejo no debe pisar un saldo más reciente ya guardado.
+    const keepsBalance =
+      latestBalance &&
+      (!account.balanceAt || latestBalance.at > account.balanceAt);
+
     await db.account.update({
       where: { id: account.id },
-      data: { status: "CONNECTED", lastSyncAt: new Date() },
+      data: {
+        status: "CONNECTED",
+        lastSyncAt: new Date(),
+        ...(keepsBalance && latestBalance
+          ? { balance: latestBalance.amount, balanceAt: latestBalance.at }
+          : {}),
+      },
     });
 
     return { ok: true, imported, skipped, filtered };

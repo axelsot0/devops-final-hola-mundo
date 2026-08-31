@@ -27,7 +27,15 @@ export interface TransactionFilters {
 }
 
 export interface MonthlySummary {
-  balance: number;
+  /**
+   * Ingresos menos gastos de todo lo que Planea ha detectado. No es el saldo
+   * de tu banco: si un ingreso llega por un correo que no reconocemos, este
+   * número se queda corto para siempre.
+   */
+  recordedNet: number;
+  /** Saldo que informan los propios bancos, si alguno lo incluye. */
+  reportedBalance: number | null;
+  reportedBalanceAt: Date | null;
   monthIncome: number;
   monthExpense: number;
   difference: number;
@@ -118,32 +126,58 @@ export async function listTransactions(
   }));
 }
 
-/** Resumen del dashboard: balance histórico y flujo del mes actual. */
+/**
+ * Resumen del dashboard.
+ *
+ * Los traspasos entre cuentas propias quedan fuera de todas las sumas: mover
+ * dinero de tu cuenta de un banco a la de otro no es ingreso ni gasto, y
+ * contarlo inflaría las dos columnas a la vez.
+ */
 export async function getMonthlySummary(userId: string): Promise<MonthlySummary> {
   const range = monthRange();
-  const [allIncome, allExpense, monthIncome, monthExpense] = await Promise.all([
-    db.transaction.aggregate({
-      where: { userId, type: "INCOME" },
-      _sum: { amount: true },
-    }),
-    db.transaction.aggregate({
-      where: { userId, type: "EXPENSE" },
-      _sum: { amount: true },
-    }),
-    db.transaction.aggregate({
-      where: { userId, type: "INCOME", date: range },
-      _sum: { amount: true },
-    }),
-    db.transaction.aggregate({
-      where: { userId, type: "EXPENSE", date: range },
-      _sum: { amount: true },
-    }),
-  ]);
+  const real = { userId, isInternal: false };
+
+  const [allIncome, allExpense, monthIncome, monthExpense, accounts] =
+    await Promise.all([
+      db.transaction.aggregate({
+        where: { ...real, type: "INCOME" },
+        _sum: { amount: true },
+      }),
+      db.transaction.aggregate({
+        where: { ...real, type: "EXPENSE" },
+        _sum: { amount: true },
+      }),
+      db.transaction.aggregate({
+        where: { ...real, type: "INCOME", date: range },
+        _sum: { amount: true },
+      }),
+      db.transaction.aggregate({
+        where: { ...real, type: "EXPENSE", date: range },
+        _sum: { amount: true },
+      }),
+      db.account.findMany({
+        where: { userId, balance: { not: null } },
+        select: { balance: true, balanceAt: true },
+      }),
+    ]);
 
   const income = Number(monthIncome._sum.amount ?? 0);
   const expense = Number(monthExpense._sum.amount ?? 0);
+
+  const reportedBalance = accounts.length
+    ? accounts.reduce((sum, a) => sum + Number(a.balance ?? 0), 0)
+    : null;
+  const reportedBalanceAt = accounts.reduce<Date | null>(
+    (latest, a) =>
+      a.balanceAt && (!latest || a.balanceAt > latest) ? a.balanceAt : latest,
+    null,
+  );
+
   return {
-    balance: Number(allIncome._sum.amount ?? 0) - Number(allExpense._sum.amount ?? 0),
+    recordedNet:
+      Number(allIncome._sum.amount ?? 0) - Number(allExpense._sum.amount ?? 0),
+    reportedBalance,
+    reportedBalanceAt,
     monthIncome: income,
     monthExpense: expense,
     difference: income - expense,
@@ -157,7 +191,7 @@ export async function getExpensesByCategory(
 ): Promise<CategoryBreakdownItem[]> {
   const grouped = await db.transaction.groupBy({
     by: ["categoryId"],
-    where: { userId, type: "EXPENSE", date: monthRange(month) },
+    where: { userId, type: "EXPENSE", isInternal: false, date: monthRange(month) },
     _sum: { amount: true },
   });
   if (grouped.length === 0) return [];

@@ -12,7 +12,7 @@ import {
   type TransactionFilters,
 } from "@/modules/transactions/service";
 import { db } from "@/lib/db";
-import { formatMoney } from "@/lib/utils";
+import { formatDate, formatMoney } from "@/lib/utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { ExpensesChart } from "./_dashboard/expenses-chart";
@@ -75,11 +75,32 @@ export default async function HomePage({
 
       {/* Resumen */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard
-          label="Balance actual"
-          value={formatMoney(summary.balance)}
-          icon={Wallet}
-        />
+        {/*
+          Dos cosas distintas, y llamarlas igual confundía: el saldo que
+          informa el banco en sus correos es el dinero que tienes; el neto
+          registrado es solo la resta de lo que Planea ha logrado detectar, y
+          se queda corto en cuanto un ingreso llega por un correo que no
+          sabemos leer. Se prefiere el saldo real cuando algún banco lo da.
+        */}
+        {summary.reportedBalance !== null ? (
+          <StatCard
+            label="Saldo disponible"
+            value={formatMoney(summary.reportedBalance)}
+            icon={Wallet}
+            hint={
+              summary.reportedBalanceAt
+                ? `Según tu banco, ${formatDate(summary.reportedBalanceAt)}`
+                : undefined
+            }
+          />
+        ) : (
+          <StatCard
+            label="Neto registrado"
+            value={formatMoney(summary.recordedNet)}
+            icon={Wallet}
+            hint="Ingresos menos gastos detectados"
+          />
+        )}
         <StatCard
           label="Ingresos del mes"
           value={formatMoney(summary.monthIncome)}
