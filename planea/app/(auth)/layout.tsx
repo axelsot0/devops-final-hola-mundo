@@ -17,7 +17,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
         {children}
         <p className="mt-8 text-center text-xs text-muted-foreground">
-          Tus finanzas personales y grupales, en un solo lugar.
+          Tus finanzas personales y grupales, en un solo lugar.{" "}
+          <Link href="/privacidad" className="hover:underline">
+            Política de privacidad
+          </Link>
         </p>
       </div>
     </div>
