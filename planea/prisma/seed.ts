@@ -17,7 +17,7 @@ import {
 } from "../lib/generated/prisma";
 import bcrypt from "bcryptjs";
 import { SYSTEM_CATEGORIES } from "../lib/system-categories";
-import { BANK_EMAIL_RULES } from "../modules/email-sync/bank-rules";
+import { BANKS } from "../modules/email-sync/bank-rules";
 import { allocatePlan } from "../modules/group-plans/allocation";
 
 const db = new PrismaClient();
@@ -34,18 +34,6 @@ function randBetween(min: number, max: number) {
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(rand() * arr.length)]!;
 }
-
-const BANKS = [
-  { name: "Banco Popular", slug: "banco-popular", color: "#005baa" },
-  { name: "Banreservas", slug: "banreservas", color: "#00529c" },
-  { name: "Banco BHD", slug: "banco-bhd", color: "#00713d" },
-  { name: "Scotiabank RD", slug: "scotiabank-rd", color: "#ec111a" },
-  { name: "APAP", slug: "apap", color: "#f26522" },
-].map((bank) => ({
-  ...bank,
-  ...BANK_EMAIL_RULES[bank.slug]!,
-  parserKey: "generic-es",
-}));
 
 const CATEGORIES = SYSTEM_CATEGORIES;
 

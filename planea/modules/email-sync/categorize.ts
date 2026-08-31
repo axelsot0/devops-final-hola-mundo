@@ -13,7 +13,7 @@ const RULES: { slug: string; keywords: string[] }[] = [
   { slug: "compras", keywords: ["amazon", "zara", "ikea", "ferretería", "ferreteria", "tienda"] },
   { slug: "educacion", keywords: ["universidad", "unibe", "intec", "pucmm", "udemy", "colegio"] },
   { slug: "suscripciones", keywords: ["netflix", "spotify", "icloud", "apple.com/bill", "claro", "altice", "viva", "disney", "hbo", "max.com", "youtube", "openai", "chatgpt", "anthropic", "adobe", "microsoft", "google"] },
-  { slug: "transferencias", keywords: ["transferencia", "depósito", "deposito"] },
+  { slug: "transferencias", keywords: ["transferencia", "depósito", "deposito", "toke", "reverso"] },
   { slug: "salario", keywords: ["nómina", "nomina", "salario", "payroll"] },
 ];
 

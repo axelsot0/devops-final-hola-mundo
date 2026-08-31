@@ -10,6 +10,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:backfill-emails": "tsx scripts/backfill-email-transactions.ts",
+    "db:sync-banks": "tsx scripts/sync-banks.ts",
     "db:migrate": "prisma migrate deploy",
     "postinstall": "prisma generate"
   },

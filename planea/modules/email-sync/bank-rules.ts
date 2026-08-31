@@ -1,10 +1,11 @@
 /**
- * Reglas de identificación de correos por entidad bancaria.
+ * Catálogo de entidades bancarias y reglas para identificar sus correos.
  *
- * Fuente única: el seed las escribe en BankEntity y la sincronización las
- * usa para completar las que falten en bases sembradas con una versión
- * anterior. Si la lista viviera en los dos sitios, acabarían divergiendo y
- * el filtro descartaría correos legítimos.
+ * Fuente única: el seed las escribe en BankEntity, `db:sync-banks` las
+ * actualiza sin borrar datos, y la sincronización las usa para completar las
+ * que falten en bases sembradas con una versión anterior. Si la lista viviera
+ * en varios sitios, acabarían divergiendo y el filtro descartaría correos
+ * legítimos.
  */
 export interface BankEmailRules {
   senderAddresses: string[];
@@ -13,8 +14,20 @@ export interface BankEmailRules {
   keywords: string[];
 }
 
-export const BANK_EMAIL_RULES: Record<string, BankEmailRules> = {
-  "banco-popular": {
+export interface BankDefinition extends BankEmailRules {
+  name: string;
+  slug: string;
+  color: string;
+  /** Variante de parseo que entiende el formato de sus correos. */
+  parserKey: string;
+}
+
+export const BANKS: BankDefinition[] = [
+  {
+    name: "Banco Popular",
+    slug: "banco-popular",
+    color: "#005baa",
+    parserKey: "generic-es",
     senderAddresses: [
       "notificaciones@popularenlinea.com",
       "notificaciones@popularenlinea.com.do",
@@ -54,31 +67,81 @@ export const BANK_EMAIL_RULES: Record<string, BankEmailRules> = {
       "salario",
     ],
   },
-  banreservas: {
+  {
+    name: "Qik Banco Digital",
+    slug: "qik",
+    // Color provisional: ajústalo si tienes el oficial de la marca.
+    color: "#6C4EE3",
+    parserKey: "qik",
+    senderAddresses: ["notificaciones@qik.do", "no-reply-qik@qik.com.do"],
+    senderDomains: ["qik.do", "qik.com.do"],
+    subjectPatterns: [
+      "Usaste tu tarjeta de débito Qik",
+      "Se reversó una transacción",
+      "Se reverso una transaccion",
+      "Te han enviado un Toke",
+      "Toke",
+    ],
+    keywords: [
+      "tarjeta de débito qik",
+      "tarjeta debito qik",
+      "toke",
+      "reversada",
+      "reversó",
+      "has recibido",
+      "balance disponible",
+      "RD$",
+    ],
+  },
+  {
+    name: "Banreservas",
+    slug: "banreservas",
+    color: "#00529c",
+    parserKey: "generic-es",
     senderAddresses: ["alertas@banreservas.com"],
     senderDomains: ["banreservas.com"],
     subjectPatterns: ["Alerta de transacción", "Notificación Banreservas"],
     keywords: ["transacción", "monto", "cuenta"],
   },
-  "banco-bhd": {
+  {
+    name: "Banco BHD",
+    slug: "banco-bhd",
+    color: "#00713d",
+    parserKey: "generic-es",
     senderAddresses: ["avisos@bhd.com.do"],
     senderDomains: ["bhd.com.do"],
     subjectPatterns: ["Aviso de transacción BHD"],
     keywords: ["consumo", "retiro", "depósito"],
   },
-  "scotiabank-rd": {
+  {
+    name: "Scotiabank RD",
+    slug: "scotiabank-rd",
+    color: "#ec111a",
+    parserKey: "generic-es",
     senderAddresses: ["alertas@scotiabank.com.do"],
     senderDomains: ["scotiabank.com.do"],
     subjectPatterns: ["ScotiaAlertas"],
     keywords: ["compra", "monto"],
   },
-  apap: {
+  {
+    name: "APAP",
+    slug: "apap",
+    color: "#f26522",
+    parserKey: "generic-es",
     senderAddresses: ["notificaciones@apap.com.do"],
     senderDomains: ["apap.com.do"],
     subjectPatterns: ["Notificación de movimiento"],
     keywords: ["movimiento", "monto"],
   },
-};
+];
+
+export const BANK_EMAIL_RULES: Record<string, BankEmailRules> =
+  Object.fromEntries(
+    BANKS.map(({ senderAddresses, senderDomains, subjectPatterns, keywords, slug }) => [
+      slug,
+      { senderAddresses, senderDomains, subjectPatterns, keywords },
+    ]),
+  );
 
 interface WithRules extends BankEmailRules {
   slug: string;

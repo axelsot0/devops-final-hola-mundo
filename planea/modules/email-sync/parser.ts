@@ -128,16 +128,136 @@ function parsePopularTable(text: string): PopularRow | null {
   };
 }
 
+/*
+ * ─────────────────────────────────────────────
+ * Qik Banco Digital
+ * ─────────────────────────────────────────────
+ *
+ * Tres plantillas, con el importe siempre en una frase reconocible:
+ *
+ *   Consumo    "Se hizo una transacción de RD$ 169.04 en UBER*RIDES con tu…"
+ *   Reverso    "Ha sido reversada la transacción de RD$ 199.74 en UBER*RIDES…"
+ *   Toke       "Has recibido RD$ 15,000.00 por parte de Axel Soto Perez en tu…"
+ *
+ * El genérico no sirve aquí: el correo de consumo también trae "Balance
+ * Disponible RD$ 14,831.94", y la primera cifra que encontrara sería el saldo
+ * de la cuenta en vez del gasto.
+ */
+const QIK_TRANSACTION =
+  /transacci[óo]n de\s*(RD\$|US\$|DOP|USD)\s*([\d.,]+)\s*en\s+([\s\S]{1,80}?)\s+con tu/i;
+const QIK_TOKE =
+  /has recibido\s*(RD\$|US\$|DOP|USD)\s*([\d.,]+)\s*por parte de\s+([\s\S]{1,80}?)\s+en tu/i;
+
+/** Filas de la tabla, como respaldo si cambia la redacción de la frase. */
+const QIK_TABLE_AMOUNT = /Monto\s*[:\t]?\s*(RD\$|US\$|DOP|USD)\s*([\d.,]+)/i;
+const QIK_TABLE_PLACE =
+  /(?:Localidad|Lugar)\s*[:\t]?\s*([^\n\t]{1,80}?)\s*(?:\n|\t|Fecha|Monto|Estatus|Balance|$)/i;
+
+/** "08-28-2026 07:09 PM (AST)" — mes primero, y AST es siempre UTC-4. */
+const QIK_DATETIME =
+  /Fecha y hora\s*[:\t]?\s*(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{1,2}):(\d{2})\s*([AP]M))?/i;
+/** "Fecha 28 de ago. 2026" en los correos de Toke. */
+const QIK_DATE_ES = /Fecha\s*[:\t]?\s*(\d{1,2})\s+de\s+([a-záéíóú]+)\.?\s+(\d{4})/i;
+
+const SPANISH_MONTHS: Record<string, number> = {
+  ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6,
+  jul: 7, ago: 8, sep: 9, sept: 9, oct: 10, nov: 11, dic: 12,
+};
+
+const AST_OFFSET_HOURS = 4;
+
+function qikDate(text: string): Date | null {
+  const stamp = QIK_DATETIME.exec(text);
+  if (stamp) {
+    const [, month, day, year, rawHour, minute, meridiem] = stamp;
+    let hour = rawHour ? Number(rawHour) % 12 : 12;
+    if (meridiem?.toUpperCase() === "PM") hour += 12;
+
+    const date = new Date(
+      Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        hour + AST_OFFSET_HOURS,
+        minute ? Number(minute) : 0,
+      ),
+    );
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const spanish = QIK_DATE_ES.exec(text);
+  if (spanish) {
+    const month = SPANISH_MONTHS[spanish[2]!.toLowerCase().slice(0, 4)] ??
+      SPANISH_MONTHS[spanish[2]!.toLowerCase().slice(0, 3)];
+    if (!month) return null;
+    // Sin hora: mediodía UTC para que el día no cambie de zona horaria.
+    const date = new Date(
+      Date.UTC(Number(spanish[3]), month - 1, Number(spanish[1]), 12),
+    );
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  return null;
+}
+
+function parseQikEmail(email: InboxEmail): ParsedTransaction | null {
+  const text = `${email.subject}. ${email.snippet}`;
+  const date = qikDate(text) ?? email.receivedAt;
+
+  // Toke recibido: ingreso, y el comercio es quien envía el dinero.
+  const toke = QIK_TOKE.exec(text);
+  if (toke) {
+    const amount = toAmount(toke[2]!);
+    if (amount === null) return null;
+
+    return {
+      type: "INCOME",
+      amount,
+      currency: toCurrency(toke[1]!, ""),
+      merchant: normalizeMerchant(toke[3]!) ?? "Toke recibido",
+      description: email.subject,
+      date,
+    };
+  }
+
+  const transaction = QIK_TRANSACTION.exec(text);
+  const tableAmount = QIK_TABLE_AMOUNT.exec(text);
+  const symbol = transaction?.[1] ?? tableAmount?.[1];
+  const amount = toAmount(transaction?.[2] ?? tableAmount?.[2] ?? "");
+  if (amount === null || !symbol) return null;
+
+  const place =
+    normalizeMerchant(transaction?.[3] ?? "") ??
+    normalizeMerchant(QIK_TABLE_PLACE.exec(text)?.[1] ?? "");
+
+  /*
+   * Un reverso devuelve el dinero al usuario, así que entra como ingreso: es
+   * la única forma de que el saldo cuadre sin un tipo "devolución" en el
+   * modelo. El prefijo evita confundirlo con un ingreso real en la lista.
+   */
+  const isReversal = /revers(?:ad[ao]|[óo])/i.test(text);
+
+  return {
+    type: isReversal ? "INCOME" : "EXPENSE",
+    amount,
+    currency: toCurrency(symbol, ""),
+    merchant: isReversal && place ? `Reverso · ${place}` : place,
+    description: email.subject,
+    date,
+  };
+}
+
 /**
  * Extrae los datos financieros de un correo bancario.
- * Cada parserKey de BankEntity podría registrar aquí una variante específica;
- * "generic-es" cubre el formato común de las alertas en español.
+ * Cada parserKey de BankEntity registra aquí su variante; "generic-es" cubre
+ * el formato común de las alertas en español.
  */
 export function parseBankEmail(
   email: InboxEmail,
   parserKey: string = "generic-es",
 ): ParsedTransaction | null {
-  void parserKey; // por ahora todos los bancos sembrados usan el formato genérico
+  if (parserKey === "qik") return parseQikEmail(email);
+
   const text = `${email.subject}. ${email.snippet}`;
   const lower = text.toLowerCase();
   const isIncome = INCOME_KEYWORDS.some((k) => lower.includes(k));
