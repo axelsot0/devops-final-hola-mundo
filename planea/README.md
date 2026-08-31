@@ -133,47 +133,54 @@ analiza, extrae tipo de movimiento, monto, fecha, comercio, descripción y
 moneda, clasifica la transacción y guarda una referencia al correo original.
 Nunca registra dos veces el mismo mensaje.
 
-La sincronización desde la pantalla de cuentas usa Gmail real vía OAuth 2.0
-(`modules/email-sync/gmail-provider.ts`). Configura `GOOGLE_CLIENT_ID` y
-`GOOGLE_CLIENT_SECRET` en `.env`, asegúrate de que el OAuth Client permita
-`http://localhost:3000/oauth2callback` como redirect URI, y luego usa el botón
-**Autorizar Gmail** en `/cuentas`. El callback local guardará
-`GOOGLE_REFRESH_TOKEN` en `.env`; después pulsa **Sincronizar** en la cuenta.
-Opcionalmente puedes ajustar `GOOGLE_REDIRECT_URI` y `GMAIL_MAX_RESULTS`
-(por defecto 9999, máximo 9999). La sincronización reconoce consumos e ingresos
-como depósitos, transferencias recibidas, pagos recibidos y nómina. El mock
-(`modules/email-sync/mock-inbox.ts`) queda disponible como implementación
-inyectable de `EmailProvider` para pruebas o desarrollo aislado.
+Cada usuario autoriza **su propio buzón**: al conectar una cuenta, Planea lo
+lleva a Google, recibe un refresh token y lo guarda cifrado (AES-256-GCM,
+`lib/crypto.ts`) en `EmailCredential`, asociado a ese usuario. No hay tokens
+compartidos en variables de entorno, así que varias personas pueden usar la
+misma instalación con sus propios correos. El mock
+(`modules/email-sync/mock-inbox.ts`) sigue disponible como implementación
+inyectable de `EmailProvider` para pruebas.
 
-### Conectar Gmail de verdad
+La primera sincronización trae el histórico reciente y las siguientes solo
+piden los correos posteriores a la última (`GMAIL_MAX_RESULTS`, 300 por
+defecto). Se reconocen consumos e ingresos: depósitos, transferencias
+recibidas, pagos recibidos y nómina.
 
-Opcional: sin esto la app funciona con la bandeja simulada.
+### Conectar Gmail
 
-1. En [Google Cloud Console](https://console.cloud.google.com) crea un proyecto
-   y activa la **API de Gmail**.
-2. En **APIs y servicios → Pantalla de consentimiento**, elige tipo **Externo**,
-   déjala en modo **Prueba** y añade tu propio correo en *Usuarios de prueba*.
-3. En **Credenciales**, crea un *ID de cliente de OAuth* de tipo
-   **Aplicación de escritorio**. Este tipo usa `http://127.0.0.1` como destino,
-   así que no hay que registrar ningún dominio.
-4. Copia el ID y el secreto a tu `.env` como `GOOGLE_CLIENT_ID` y
-   `GOOGLE_CLIENT_SECRET`.
-5. Ejecuta una sola vez:
+Configuración de la app, una sola vez (la hace quien despliega):
+
+1. En [Google Cloud Console](https://console.cloud.google.com) crea un
+   proyecto y activa la **API de Gmail**.
+2. **APIs y servicios → Pantalla de consentimiento**: tipo **Externo**, modo
+   **Prueba**. Añade en *Usuarios de prueba* el correo de cada persona que
+   vaya a probar la app (hasta 100).
+3. **Credenciales → Crear credenciales → ID de cliente de OAuth**, tipo
+   **Aplicación web**. En *URIs de redireccionamiento autorizados* añade:
+   - `http://localhost:3000/oauth2callback`
+   - `https://TU-DOMINIO/oauth2callback` (el del despliegue)
+4. Copia el ID y el secreto al entorno como `GOOGLE_CLIENT_ID` y
+   `GOOGLE_CLIENT_SECRET`, y genera `ENCRYPTION_KEY`:
 
    ```bash
-   node scripts/gmail-refresh-token.mjs
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
    ```
 
-   Abre la URL que imprime, autoriza el acceso y pega en el `.env` el
-   `GOOGLE_REFRESH_TOKEN` que devuelve.
+Con eso, cada persona solo tiene que registrarse en la app, entrar en
+**Cuentas → Conectar Gmail**, elegir su banco y aprobar el permiso en Google.
+No hay que pegar URLs ni tocar el `.env`.
 
-> Mientras la pantalla de consentimiento siga en modo **Prueba**, Google caduca
-> el refresh token a los 7 días y habrá que volver a generarlo. Para que dure,
-> hay que publicar la aplicación; con el permiso `gmail.readonly` eso exige
-> pasar la verificación de Google.
+> **Modo Prueba: el permiso caduca a los 7 días.** Google invalida los refresh
+> tokens de las apps sin publicar, así que cada tanto tus invitados verán
+> «Conectar Gmail» de nuevo en la tarjeta de la cuenta; volver a autorizar
+> restaura la conexión y conserva las transacciones ya importadas. Publicar la
+> app quitaría ese límite, pero `gmail.readonly` es un permiso *restringido* y
+> exige pasar la verificación de Google (con evaluación de seguridad externa),
+> desproporcionado para una prueba entre amigos.
 
 El permiso solicitado es `gmail.readonly`: la app solo lee correos, nunca
-envía ni modifica nada.
+envía ni modifica nada. Cualquiera puede revocarlo desde
+[su cuenta de Google](https://myaccount.google.com/permissions).
 
 ## Privacidad financiera
 
@@ -234,10 +241,27 @@ Auth.js · Zod · Recharts · Lucide.
 | `npm run db:push`  | Sincroniza el esquema con la base       |
 | `npm run db:seed`  | Carga los datos de demostración         |
 | `npm run db:migrate` | Aplica migraciones (producción)       |
+| `npm run db:backfill-emails` | Reprocesa los correos ya importados |
 
 ## Despliegue
 
-Pensado para Vercel con Supabase PostgreSQL: define `DATABASE_URL` y
-`AUTH_SECRET` como variables de entorno y ejecuta `npm run db:migrate` contra
-la base de producción. La autenticación es por correo y contraseña, así que no
-requiere registrar un dominio con ningún proveedor externo.
+Pensado para Vercel con Supabase PostgreSQL. Variables de entorno del
+proyecto:
+
+| Variable | Para qué |
+| --- | --- |
+| `DATABASE_URL` | Cadena del *Session pooler* de Supabase |
+| `AUTH_SECRET` | Firma de las sesiones (`npx auth secret`) |
+| `AUTH_TRUST_HOST` | `true` detrás del proxy de Vercel |
+| `ENCRYPTION_KEY` | Cifra los refresh tokens guardados |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Cliente OAuth de Google |
+
+Después del primer despliegue, aplica el esquema a la base de producción
+(`npm run db:migrate`) y siembra bancos y categorías (`npm run db:seed`).
+Añade el dominio del despliegue como URI de redirección en el cliente OAuth:
+`https://TU-DOMINIO/oauth2callback`.
+
+Para probar en local con más gente, cualquier túnel HTTPS
+(`ngrok http 3000`, `cloudflared tunnel`) sirve: registra también esa URL como
+redirect URI. La autenticación de Planea es por correo y contraseña, así que
+tus invitados solo necesitan registrarse en `/registro`.
