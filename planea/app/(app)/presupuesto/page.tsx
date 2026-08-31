@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth-helpers";
 import { getCurrentBudget } from "@/modules/budgets/service";
 import {
-  getMonthlyRecurringTotal,
   listRecurringPayments,
+  monthlyEquivalent,
 } from "@/modules/recurring-payments/service";
 import { listCategories } from "@/modules/categories/service";
 import { listAccounts } from "@/modules/accounts/service";
@@ -16,14 +16,19 @@ export const metadata: Metadata = { title: "Presupuesto · Planea" };
 
 export default async function BudgetPage() {
   const user = await requireUser();
-  const [budget, payments, monthlyTotal, categories, accounts] =
-    await Promise.all([
-      getCurrentBudget(user.id),
-      listRecurringPayments(user.id),
-      getMonthlyRecurringTotal(user.id),
-      listCategories(user.id),
-      listAccounts(user.id),
-    ]);
+  const budget = await getCurrentBudget(user.id);
+  const payments = await listRecurringPayments(user.id);
+  const monthlyTotal = payments.reduce(
+    (sum, payment) =>
+      payment.status === "ACTIVE"
+        ? sum + monthlyEquivalent(payment.amount, payment.periodicity)
+        : sum,
+    0,
+  );
+  const [categories, accounts] = await Promise.all([
+    listCategories(user.id),
+    listAccounts(user.id),
+  ]);
 
   return (
     <>
