@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import type { Prisma, TransactionSource, TransactionType } from "@/lib/generated/prisma";
 
+const DEFAULT_TRANSACTION_LIST_LIMIT = 9999;
+
 export interface TransactionDTO {
   id: string;
   type: TransactionType;
@@ -77,7 +79,7 @@ function buildWhere(userId: string, filters: TransactionFilters): Prisma.Transac
 export async function listTransactions(
   userId: string,
   filters: TransactionFilters = {},
-  limit = 100,
+  limit = DEFAULT_TRANSACTION_LIST_LIMIT,
 ): Promise<TransactionDTO[]> {
   const transactions = await db.transaction.findMany({
     where: buildWhere(userId, filters),
