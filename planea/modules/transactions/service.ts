@@ -223,17 +223,22 @@ export async function getExpensesByCategory(
  * el presupuesto sugerido y estimar la capacidad de ahorro en planes.
  */
 export async function getMonthlyAverages(userId: string, months = 3) {
-  const now = new Date();
-  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1));
-  const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const { year, month } = currentYearMonth();
+  // Meses completos anteriores al actual, en hora dominicana.
+  const from = monthBoundsInAst(year, month - months).gte;
+  const to = monthBoundsInAst(year, month).gte;
+
+  // Los traspasos entre cuentas propias quedan fuera: no son ingreso ni gasto
+  // y falsearían el promedio sobre el que se propone el presupuesto.
+  const real = { userId, isInternal: false, date: { gte: from, lt: to } };
 
   const [income, expense] = await Promise.all([
     db.transaction.aggregate({
-      where: { userId, type: "INCOME", date: { gte: from, lt: to } },
+      where: { ...real, type: "INCOME" },
       _sum: { amount: true },
     }),
     db.transaction.aggregate({
-      where: { userId, type: "EXPENSE", date: { gte: from, lt: to } },
+      where: { ...real, type: "EXPENSE" },
       _sum: { amount: true },
     }),
   ]);
