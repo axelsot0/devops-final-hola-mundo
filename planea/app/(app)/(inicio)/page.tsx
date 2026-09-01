@@ -12,6 +12,7 @@ import {
   type TransactionFilters,
 } from "@/modules/transactions/service";
 import { db } from "@/lib/db";
+import { nowInAst } from "@/lib/time";
 import { formatDate, formatMoney } from "@/lib/utils";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
@@ -61,9 +62,12 @@ export default async function HomePage({
     ]);
 
   const firstName = user.name.split(" ")[0] || user.name;
-  const monthLabel = new Date().toLocaleDateString("es-DO", {
+  // En hora dominicana: si no, a partir de las 8 de la noche del día 31 el
+  // encabezado ya anunciaba el mes siguiente.
+  const monthLabel = nowInAst().toLocaleDateString("es-DO", {
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
   });
 
   return (

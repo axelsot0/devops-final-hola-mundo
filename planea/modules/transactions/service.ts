@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { currentYearMonth, monthBoundsInAst } from "@/lib/time";
 import type { Prisma, TransactionSource, TransactionType } from "@/lib/generated/prisma";
 
 const DEFAULT_TRANSACTION_LIST_LIMIT = 9999;
@@ -50,22 +51,17 @@ export interface CategoryBreakdownItem {
   percentage: number;
 }
 
+/**
+ * Rango del mes en hora dominicana. Con UTC, un consumo de las 9 de la noche
+ * del día 31 caía en el mes siguiente y desaparecía del resumen.
+ */
 function monthRange(month?: string): { gte: Date; lt: Date } {
-  let year: number;
-  let m: number;
   const parsed = month ? /^(\d{4})-(\d{2})$/.exec(month) : null;
-  if (parsed) {
-    year = Number(parsed[1]);
-    m = Number(parsed[2]) - 1;
-  } else {
-    const now = new Date();
-    year = now.getUTCFullYear();
-    m = now.getUTCMonth();
-  }
-  return {
-    gte: new Date(Date.UTC(year, m, 1)),
-    lt: new Date(Date.UTC(year, m + 1, 1)),
-  };
+  const { year, month: m } = parsed
+    ? { year: Number(parsed[1]), month: Number(parsed[2]) - 1 }
+    : currentYearMonth();
+
+  return monthBoundsInAst(year, m);
 }
 
 function buildWhere(userId: string, filters: TransactionFilters): Prisma.TransactionWhereInput {
